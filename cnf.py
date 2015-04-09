@@ -52,6 +52,24 @@ class Var():
     def __str__(self):
         return self.name
 
+class Term():
+    """
+    A term in a clause.
+
+    Either a variable, or a negated variable.
+
+    """
+    def __init__(self, var, negated=False):
+        self.var = var
+        self.negated = negated
+
+    def __repr__(self):
+        return "Term(var={!r}, negated={!r}".format(self.var, self.negated)
+
+    def __str__(self):
+        return "{}{}".format("~" if self.negated else "",
+                             self.var)
+
 class Clause():
     """
     A CNF clause.
@@ -59,33 +77,46 @@ class Clause():
     That is, a set of positive or negative vars all logically OR'd together.
 
     """
-    def __init__(self, positive_terms, negative_terms):
-        self.positive_terms = frozenset(positive_terms)
-        self.negative_terms = frozenset(negative_terms)
+    def __init__(self, terms):
+        self.terms = frozenset(terms)
 
     def __repr__(self):
-        terms = ["{!r}".format(t) for t in self.positive_terms]
-        terms += ["~{!r}".format(t) for t in self.negative_terms]
-        return "<Clause({})>".format(", ".join(terms))
+        return "Clause(terms={!r})".format(self.terms)
 
     def __str__(self):
-        terms = ["{}".format(t) for t in self.positive_terms]
-        terms += ["~{}".format(t) for t in self.negative_terms]
-        return ", ".join(terms)
+        return " v ".join(str(t) for t in self.terms)
+
+    def __iter__(self):
+        return iter(self.terms)
+
+class CNF():
+    """
+    A CNF expression.
+
+    That is, a set of CNF clauses.
+
+    """
+    def __init__(self, clauses=()):
+        self.clauses = frozenset(clauses)
+
+    def __repr__(self):
+        return "CNF(clauses={!r})".format(self.clauses)
+
+    def __str__(self):
+        return " ^ ".join("({})".format(c) for c in self.clauses)
+
+    def __or__(self, other):
+        return CNF(self.clauses | other.clauses)
+
+    def __iter__(self):
+        return iter(self.clauses)
 
 def all_cnfs(cnfs):
     """
     Concatenate a set of CNFs (ie. concatenate sets of clauses).
 
     """
-    return {clause for cnf in cnfs for clause in cnf}
-
-def at_least_one(pvars):
-    """
-    Return a CNF expression which is true iff at least one of `pvars` is true.
-
-    """
-    return {Clause(positive_terms=pvars, negative_terms={})}
+    return CNF(clause for cnf in cnfs for clause in cnf)
 
 def _pairwise_at_most_one(pvars):
     """
@@ -95,9 +126,11 @@ def _pairwise_at_most_one(pvars):
 
     """
     pvars = list(pvars)
-    return { Clause(positive_terms={}, negative_terms={pvars[i], pvars[j]})
-                                        for i in range(len(pvars))
-                                            for j in range(i + 1, len(pvars)) }
+
+    return CNF(Clause({Term(pvars[i], negated=True),
+                       Term(pvars[j], negated=True)})
+                  for i in range(len(pvars)) for j in range(i + 1, len(pvars)))
+                
 
 def _create_commander(pvars):
     """
@@ -112,11 +145,15 @@ def _create_commander(pvars):
     """
     c = Var()
 
-    cnf = set()
-    cnf |= {Clause(positive_terms=pvars, negative_terms={c})}
-    cnf |= { Clause(positive_terms={c}, negative_terms={p}) for p in pvars }
+    clauses = set()
 
-    return c, cnf
+    # If the commander is true, then at least one of the vars must be true.
+    clauses |= {Clause({Term(v) for v in pvars} | {Term(c, negated=True)})}
+
+    # If the commander is false, then none of the variables can be true.
+    clauses |= {Clause({Term(c), Term(p, negated=True)}) for p in pvars}
+
+    return c, CNF(clauses)
 
 def _at_most_one_reduce(pvars):
     """
@@ -130,7 +167,7 @@ def _at_most_one_reduce(pvars):
     assert len(pvars) >= 6
 
     commanders = []
-    cnf = set()
+    cnf = CNF()
     while pvars:
         group, pvars = pvars[:3], pvars[3:]
         c, sub_cnf = _create_commander(group)
@@ -150,13 +187,20 @@ def at_most_one(pvars):
 
     """
 
-    cnf = set()
+    cnf = CNF()
     while len(pvars) >= 6:
         pvars, new_cnf = _at_most_one_reduce(pvars)
         cnf |= new_cnf
     cnf |= _pairwise_at_most_one(pvars)
 
     return cnf
+
+def at_least_one(pvars):
+    """
+    Return a CNF expression which is true iff at least one of `pvars` is true.
+
+    """
+    return CNF({Clause(Term(v) for v in pvars)})
 
 def exactly_one(pvars):
     """
@@ -172,17 +216,31 @@ def solve(cnf):
 
     """
 
-    pvars = { v for clause in cnf for v in clause.negative_terms }
-    pvars |= { v for clause in cnf for v in clause.positive_terms }
-    pvars = list(pvars)
+    # Construct mappings between Vars and variable IDs. Variable IDs are
+    # integers > 0 used by pycosat to identify variables.
+    pvars = list(sorted({term.var for clause in cnf for term in clause},
+                        key=lambda v: v.name))
+    pvar_to_id = {pvar: idx + 1 for idx, pvar in enumerate(pvars)}
 
-    pvar_to_index = {pvar: idx + 1 for idx, pvar in enumerate(pvars)}
 
+    # The pycosat input is just a list of lists, mirroring the CNF/Clause
+    # hierarchy. Terms are replaced by their variable IDs, (numerically)
+    # negated if the term is (logically) negated.
+    cnf = [[pvar_to_id[term.var] * (-1 if term.negated else 1)
+                for term in clause]
+                    for clause in cnf]
+    
 
-    cnf = [ [ pvar_to_index[v] for v in clause.positive_terms ] + 
-            [ -pvar_to_index[v] for v in clause.negative_terms ]
-                                                            for clause in cnf ]
-        
     for sol in pycosat.itersolve(cnf):
-        yield { pvars[abs(idx) - 1]: (idx > 0) for idx in sol }
+        yield { pvars[abs(n) - 1]: (n > 0) for n in sol }
+
+def solve_one(cnf):
+    """
+    Solve a CNF formula. Return only the first solution.
+
+    Raises an IteratorException if no solutions exist.
+
+    """
+    
+    return next(solve(cnf))
 
