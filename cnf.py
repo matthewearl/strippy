@@ -27,7 +27,14 @@ functions.
 """
 
 __all__ = (
+    'at_least_one',
+    'at_most_one',
+    'exactly_one',
     'Clause',
+    'CNF',
+    'solve',
+    'solve_one',
+    'Term',
     'Var',
 )
 
@@ -111,12 +118,13 @@ class CNF():
     def __iter__(self):
         return iter(self.clauses)
 
-def all_cnfs(cnfs):
-    """
-    Concatenate a set of CNFs (ie. concatenate sets of clauses).
+    @staticmethod
+    def all(cnfs):
+        """
+        Concatenate an iterable of CNFs.
 
-    """
-    return CNF(clause for cnf in cnfs for clause in cnf)
+        """
+        return CNF(clause for cnf in cnfs for clause in cnf)
 
 def _pairwise_at_most_one(pvars):
     """
@@ -221,7 +229,6 @@ def solve(cnf):
     pvars = list(sorted({term.var for clause in cnf for term in clause},
                         key=lambda v: v.name))
     pvar_to_id = {pvar: idx + 1 for idx, pvar in enumerate(pvars)}
-
 
     # The pycosat input is just a list of lists, mirroring the CNF/Clause
     # hierarchy. Terms are replaced by their variable IDs, (numerically)
