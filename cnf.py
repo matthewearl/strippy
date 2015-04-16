@@ -30,6 +30,8 @@ __all__ = (
     'at_least_one',
     'at_most_one',
     'exactly_one',
+    'iff',
+    'implies',
     'Clause',
     'Expr',
     'solve',
@@ -217,6 +219,20 @@ def exactly_one(pvars):
     """
 
     return at_least_one(pvars) | at_most_one(pvars)
+
+def implies(pvar1, pvar2):
+    """
+    Return a CNF expression which is true iff var1 implies var2.
+
+    """
+    return Expr({Clause({Term(pvar1, negated=True), Term(pvar2)})})
+
+def iff(pvar1, pvar2):
+    """
+    Return a CNF expression which is true iff var1 is equivalent to var2.
+
+    """
+    return implies(pvar1, pvar2) | implies(pvar2, pvar1)
 
 def solve(cnf):
     """
