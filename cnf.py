@@ -31,7 +31,7 @@ __all__ = (
     'at_most_one',
     'exactly_one',
     'Clause',
-    'CNF',
+    'Expr',
     'solve',
     'solve_one',
     'Term',
@@ -96,7 +96,7 @@ class Clause():
     def __iter__(self):
         return iter(self.terms)
 
-class CNF():
+class Expr():
     """
     A CNF expression.
 
@@ -107,13 +107,13 @@ class CNF():
         self.clauses = frozenset(clauses)
 
     def __repr__(self):
-        return "CNF(clauses={!r})".format(self.clauses)
+        return "Expr(clauses={!r})".format(self.clauses)
 
     def __str__(self):
         return " ^ ".join("({})".format(c) for c in self.clauses)
 
     def __or__(self, other):
-        return CNF(self.clauses | other.clauses)
+        return Expr(self.clauses | other.clauses)
 
     def __iter__(self):
         return iter(self.clauses)
@@ -124,7 +124,7 @@ class CNF():
         Concatenate an iterable of CNFs.
 
         """
-        return CNF(clause for cnf in cnfs for clause in cnf)
+        return Expr(clause for cnf in cnfs for clause in cnf)
 
 def _pairwise_at_most_one(pvars):
     """
@@ -135,7 +135,7 @@ def _pairwise_at_most_one(pvars):
     """
     pvars = list(pvars)
 
-    return CNF(Clause({Term(pvars[i], negated=True),
+    return Expr(Clause({Term(pvars[i], negated=True),
                        Term(pvars[j], negated=True)})
                   for i in range(len(pvars)) for j in range(i + 1, len(pvars)))
                 
@@ -161,7 +161,7 @@ def _create_commander(pvars):
     # If the commander is false, then none of the variables can be true.
     clauses |= {Clause({Term(c), Term(p, negated=True)}) for p in pvars}
 
-    return c, CNF(clauses)
+    return c, Expr(clauses)
 
 def _at_most_one_reduce(pvars):
     """
@@ -175,7 +175,7 @@ def _at_most_one_reduce(pvars):
     assert len(pvars) >= 6
 
     commanders = []
-    cnf = CNF()
+    cnf = Expr()
     while pvars:
         group, pvars = pvars[:3], pvars[3:]
         c, sub_cnf = _create_commander(group)
@@ -195,7 +195,7 @@ def at_most_one(pvars):
 
     """
 
-    cnf = CNF()
+    cnf = Expr()
     while len(pvars) >= 6:
         pvars, new_cnf = _at_most_one_reduce(pvars)
         cnf |= new_cnf
@@ -208,7 +208,7 @@ def at_least_one(pvars):
     Return a CNF expression which is true iff at least one of `pvars` is true.
 
     """
-    return CNF({Clause(Term(v) for v in pvars)})
+    return Expr({Clause(Term(v) for v in pvars)})
 
 def exactly_one(pvars):
     """
