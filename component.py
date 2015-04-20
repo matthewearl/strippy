@@ -63,7 +63,7 @@ class Board():
             raise ValueError
 
         # Check all holes in the traces are holes in the board.
-        if not {h for t for t in self.traces for h in t} <= self.holes:
+        if not {h for t in self.traces for h in t} <= self.holes:
             raise ValueError
 
 class StripBoard(Board):
@@ -150,7 +150,7 @@ class LeadedComponent(Component):
     def get_relative_positions(self):
         for length in range(1, self._max_length + 1):
             if self._allow_vertical:
-                yield {self_terminals[0]: (0, 0),
+                yield {self.terminals[0]: (0, 0),
                        self.terminals[1]: (length, 0)}
                 yield {self.terminals[1]: (0, 0),
                        self.terminals[0]: (length, 0)}

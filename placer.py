@@ -33,10 +33,10 @@ class _HashableDict():
 
     """
     def __init__(self, position):
-        self._position = position
+        self.position = position
 
     def __getitem__(self, key):
-        return self._position[key]
+        return self.position[key]
 
 def place(board, components, nets):
     """
@@ -70,7 +70,7 @@ def place(board, components, nets):
     #  - net_vars[hole, net] is true iff hole `net` is part of the net `net`.
     #  - grid_vars[comp, hole] if component `comp` is occupying hole `hole`.
     position_vars = {(comp, pos): cnf.Var()
-                                for comp in components for pos in positions[c]}
+                             for comp in components for pos in positions[comp]}
     net_vars = {(hole, net): cnf.Var() for hole in holes for net in nets}
     grid_vars = {(comp, hole): cnf.Var()
                                       for comp in components for hole in holes}
@@ -89,7 +89,7 @@ def place(board, components, nets):
     #    TODO: Encode physical hole occupation info, to avoid components
     #    overlapping at non-terminal locations.
     expr = cnf.Expr.all(cnf.exactly_one(position_vars[comp, pos]
-                                                       for pos in positions[c])
+                                                    for pos in positions[comp])
                             for comp in components)
     expr |= cnf.Expr.all(cnf.iff(net_vars[h1, net], net_vars[h2, net])
                                     for h1, h2 in board.traces for net in nets)
@@ -112,9 +112,9 @@ def place(board, components, nets):
 
     # Find solutions and map each one back to a mapping of components to
     # positions.
-    for sol in cnf.solve(expr)
-        mapping = {comp: pos for (comp, pos), var in position_vars.items()
-                                                                   if sol[var]}
+    for sol in cnf.solve(expr):
+        mapping = {comp: pos.position 
+                     for (comp, pos), var in position_vars.items() if sol[var]}
         # If this fails the "exactly one position" constraint has been
         # violated.
         assert len(mapping) == len(components)

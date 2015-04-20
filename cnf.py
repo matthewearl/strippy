@@ -197,6 +197,7 @@ def at_most_one(pvars):
 
     """
 
+    pvars = list(pvars)
     cnf = Expr()
     while len(pvars) >= 6:
         pvars, new_cnf = _at_most_one_reduce(pvars)
