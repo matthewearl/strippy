@@ -20,7 +20,7 @@
 #     USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 """
-Trivial example, placing a single resistor on a 2x2 strip board.
+Simple example, placing 2 resistors in parallel on a 2x2 strip board.
 
 """
 
@@ -28,15 +28,17 @@ import component
 import placer
 
 r1 = component.LeadedComponent(1)
+r2 = component.LeadedComponent(1)
 
 board = component.StripBoard((2, 2))
 
 nets = (
-    (r1.terminals[0],),
-    (r1.terminals[1],),
+    (r1.terminals[0], r2.terminals[0]),
+    (r1.terminals[1], r2.terminals[1]),
 )
 
-for placement in placer.place(board, (r1,), nets):
+for placement in placer.place(board, (r1, r2), nets):
     print("R1: {}".format(placement[r1]))
+    print("R2: {}".format(placement[r2]))
     print()
 
