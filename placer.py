@@ -20,13 +20,9 @@
 
 __all__ = (
     'place',
-    'Unplaceable',
 )
 
 import cnf
-
-class Unplaceable(Exception):
-    pass
 
 class _HashableDict():
     """
@@ -52,13 +48,9 @@ def place(board, components, nets):
     nets: Iterable of nets. Each net is a set of terminals that are to be
         condutively connected.
 
-    Returns:
+    Yields:
         A dict of component to position mappings, which represents a placement
         of the components which satisfies the net list.
-
-    Raises:
-        Unplaceable: When the components cannot be placed on the board in a way
-        that satifies the net list.
 
     """
 
@@ -84,7 +76,7 @@ def place(board, components, nets):
                                       for comp in components for hole in holes}
 
     # Build up a CNF expression:
-    #  - A component can be in at most one position.
+    #  - A component must be in exactly one position.
     #  - If a hole that is part of a trace is in a net, then the other hole in
     #    the trace is also in that net, and vice versa.
     #  - At most one component can be in a given hole.
@@ -96,7 +88,7 @@ def place(board, components, nets):
     #    corresponding with its terminals are considered occupied.
     #    TODO: Encode physical hole occupation info, to avoid components
     #    overlapping at non-terminal locations.
-    expr = cnf.Expr.all(cnf.at_most_one(position_vars[comp, pos]
+    expr = cnf.Expr.all(cnf.exactly_one(position_vars[comp, pos]
                                                        for pos in positions[c])
                             for comp in components)
     expr |= cnf.Expr.all(cnf.iff(net_vars[h1, net], net_vars[h2, net])
@@ -118,4 +110,13 @@ def place(board, components, nets):
                          for pos in positions[comp]
                          for term in comp.terminals)
 
-
+    # Find solutions and map each one back to a mapping of components to
+    # positions.
+    for sol in cnf.solve(expr)
+        mapping = {comp: pos for (comp, pos), var in position_vars.items()
+                                                                   if sol[var]}
+        # If this fails the "exactly one position" constraint has been
+        # violated.
+        assert len(mapping) == len(components)
+        yield mapping
+        
