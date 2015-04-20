@@ -43,15 +43,10 @@ class Board():
         holes: Set of (x, y) pairs indicating the coordinates of holes in the
             board: If a pair (x, y) is in the set then the board has a hole at
             this position.
-        strips: A list of lists of holes that are conductively connected. The
-            ordering of each list indicates connectedness, in that if the kth
-            element of a strip is drilled out then elements i and j are
-            considered disconnected for all i < k, j > k. As such a given hole
-            can only be connected to up to two other holes, so some board
-            topologies (eg. T junctions) cannot be represented.
+        traces: A list of pairs of holes that are conductively connected.
 
     """
-    def __init__(self, size, holes, strips):
+    def __init__(self, size, holes, traces):
         """
         Initialize the object.
 
@@ -60,15 +55,15 @@ class Board():
         """
         self.size = tuple(size)
         self.holes = set(holes)
-        self.strips = set(tuple(strip) for strip in strips)
+        self.traces = set(tuple(sorted(hole_pair)) for hole_pair in traces)
 
         # Check each hole is within the bounds of the board.
         if not all(0 <= x < size[0] and 0 <= y < size[1] for (x, y) in
                    self.holes):
             raise ValueError
 
-        # Check all the strip elements are located on holes.
-        if not all(h in self.holes for strip in self.strips for h in strip):
+        # Check all holes in the traces are holes in the board.
+        if not {h for t for t in self.traces for h in t} <= self.holes:
             raise ValueError
 
 class StripBoard(Board):
@@ -79,8 +74,9 @@ class StripBoard(Board):
     """
     def __init__(self, size):
         holes = [(x, y) for y in range(size[1]) for x in range(size[0])]
-        strips = [[(x, y) for x in range(size[0])] for y in range(size[1])]
-        super().__init__(size, holes, strips)
+        traces = [((x, y), (x + 1, y))
+                    for y in range(size[1]) for x in range(size[0] - 1)]
+        super().__init__(size, holes, traces)
 
 class Terminal():
     """
