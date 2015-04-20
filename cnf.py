@@ -218,6 +218,7 @@ def exactly_one(pvars):
     Return a CNF expression which is true iff exactly one of `pvars` is true.
 
     """
+    pvars = list(pvars)
 
     return at_least_one(pvars) | at_most_one(pvars)
 
