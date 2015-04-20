@@ -20,42 +20,20 @@
 
 __all__ = (
     'place',
+    'Unplaceable',
 )
 
 import cnf
 
-
-class PositionVar(cnf.Var):
-    """
-    A variable which is true if a particular component is in a particular
-    position.
-
-    """
-
-    def __init__(self, component, position_idx):
-        self.component = component
-        self.position_idx = position_idx
-
-        super().__init__()
-
-class NetVar(cnf.Var):
-    """
-    A variable which is true iff a particular hole is in a particular net.
-
-    """
-
-    def __init__(self, hole_idx, net_idx):
-        self.hole_idx = hole_idx
-        self.net_idx = net_idx
-
-        super().__init__()
+class Unplaceable(Exception):
+    pass
 
 class _HashableDict():
     """
     A dumb wrapper around a dict to make it hashable.
 
-    The hash is just the id() so don't use in sets/dicts where this might be an
-    issue.
+    The hash is just the id() so don't use in sets/dicts if you want different
+    objects with the same value to have only one entry.
 
     """
     def __init__(self, position):
@@ -64,9 +42,23 @@ class _HashableDict():
     def __getitem__(self, key):
         return self._position[key]
 
-
 def place(board, components, nets):
     """
+    Place components on a board, according to a net list.
+
+    board: The board to place components on. A subclas of `component.Board`. 
+    components: Iterable of components to place on the board. Each component is
+        subclass of `component.Component`.
+    nets: Iterable of nets. Each net is a set of terminals that are to be
+        condutively connected.
+
+    Returns:
+        A dict of component to position mappings, which represents a placement
+        of the components which satisfies the net list.
+
+    Raises:
+        Unplaceable: When the components cannot be placed on the board in a way
+        that satifies the net list.
 
     """
 
@@ -75,6 +67,10 @@ def place(board, components, nets):
     nets = [frozenset(net) for net in nets]
     positions = {c: [_HashableDict(p) for p in c.get_positions(board)]
                                                            for c in components}
+    holes = board.holes
+
+    # A lookup used below, which gives the net corresponding with a 
+    terminal_to_net = {t: net for net in nets for t in net}
 
     # Set up variables.
     #  - position_vars[comp, pos] is true iff component `comp` is in position
@@ -89,15 +85,37 @@ def place(board, components, nets):
 
     # Build up a CNF expression:
     #  - A component can be in at most one position.
-    #  - If a hole that is part of a strip is in a net, then the next hole in
-    #    the strip is also in that net, and vice versa.
+    #  - If a hole that is part of a trace is in a net, then the other hole in
+    #    the trace is also in that net, and vice versa.
+    #  - At most one component can be in a given hole.
+    #  - Each hole can be part of at most one net.
+    #  - If a component is in a particular position, then each hole occupied by
+    #    a terminal of the component must be part of the net corresponding with
+    #    that terminal.
+    #  - If a component is in a particular position, then the holes
+    #    corresponding with its terminals are considered occupied.
+    #    TODO: Encode physical hole occupation info, to avoid components
+    #    overlapping at non-terminal locations.
     expr = cnf.Expr.all(cnf.at_most_one(position_vars[comp, pos]
-                                            for pos in positions[c])
+                                                       for pos in positions[c])
                             for comp in components)
-    expr |= cnf.Expr.all(cnf.iff(net_vars[strip[i], net],
-                                     net_vars[strip[i + 1], net])
-                            for strip in board.strips
-                                for i in range(len(strip) - 1)
-                                    for net in nets)
+    expr |= cnf.Expr.all(cnf.iff(net_vars[h1, net], net_vars[h2, net])
+                                    for h1, h2 in board.traces for net in nets)
+    expr |= cnf.Expr.all(cnf.at_most_one(grid_vars[comp, hole]
+                                                        for comp in components)
+                            for hole in holes)
+    expr |= cnf.Expr.all(cnf.at_most_one(net_vars[hole, net] for net in nets)
+                            for hole in holes)
+    expr |= cnf.Expr.all(cnf.implies(position_vars[comp, pos],
+                                     net_vars[pos[term],
+                                                        terminal_to_net[term]])
+                            for comp in components
+                            for pos in positions[comp]
+                            for term in comp.terminals)
+    expr |= cnf.Expr.all(cnf.implies(position_vars[comp, pos],
+                                     grid_vars[comp, pos[term]])
+                         for comp in components
+                         for pos in positions[comp]
+                         for term in comp.terminals)
 
 
