@@ -20,10 +20,10 @@
 #     USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 """
-A simple example, placing 3 resistors in a loop on a 2x3 strip board.
+A simple example, placing 3 resistors in a loop on a 3x3 strip board.
 
 Two of the resistors have a maximum length of 1, whereas the other has a
-maximum length of 1. As such there should be 2 solutions in total.
+maximum length of 2. There should be 12 solutions in total.
 
 """
 
@@ -34,7 +34,7 @@ r1 = component.LeadedComponent(2)
 r2 = component.LeadedComponent(1)
 r3 = component.LeadedComponent(1)
 
-board = component.StripBoard((2, 3))
+board = component.StripBoard((3, 3))
 
 nets = (
     (r1.terminals[1], r2.terminals[0]),
