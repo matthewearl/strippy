@@ -66,20 +66,20 @@ def place(board, components, nets):
 
     # Build up a CNF expression.
 
-    # If a component is in a particular position, then each hole occupied by a
-    # terminal of the component must be part of the net corresponding with that
-    # terminal.
-    expr |= cnf.Expr.all(cnf.implies(position_vars[comp, pos],
-                                     net_vars[pos[term],
-                                                        terminal_to_net[term]])
-                             for comp in components
-                             for pos in positions[comp]
-                             for term in comp.terminals)
-
     # A component must be in exactly one position.
     expr = cnf.Expr.all(cnf.exactly_one(position_vars[comp, pos]
                                                     for pos in positions[comp])
                              for comp in components)
+
+    # If a component is in a particular position, then each hole occupied by a
+    # terminal of the component must be part of the net corresponding with that
+    # terminal.
+    expr |= cnf.Expr.all(cnf.implies(position_vars[comp, pos],
+                                     net_vars[pos.terminal_positions[term],
+                                                        terminal_to_net[term]])
+                             for comp in components
+                             for pos in positions[comp]
+                             for term in comp.terminals)
 
     # If a hole that is part of a trace is in a net, then the other hole in the
     # trace is also in that net, and vice versa.
@@ -100,10 +100,10 @@ def place(board, components, nets):
 
     # If a given cell is occupied by a component, then the component must be in
     # a position that occupies that cell.
-    expr |= cnf.Expr(cnf.Clause({Term(occ_vars[cell, comp], negated=True)} |
-                                {Term(position_vars[comp, pos])
-                                                      for pos in comp.positions
-                                                      if cell in pos.spaces})
+    expr |= cnf.Expr(cnf.Clause({cnf.Term(occ_vars[cell, comp], negated=True)}
+                                | {cnf.Term(position_vars[comp, pos])
+                                                     for pos in positions[comp]
+                                                     if cell in pos.occupies})
                         for comp in components
                         for cell in spaces)
 
@@ -115,7 +115,7 @@ def place(board, components, nets):
     # Find solutions and map each one back to a mapping of components to
     # positions.
     for sol in cnf.solve(expr):
-        mapping = {comp: pos.position 
+        mapping = {comp: pos
                      for (comp, pos), var in position_vars.items() if sol[var]}
         # If this fails the "exactly one position" constraint has been
         # violated.

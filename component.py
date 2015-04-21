@@ -74,7 +74,7 @@ class Position():
         is a space on the board for each cell that the component occupies.
 
         """
-        return (set(terminal_positions.values()) <= board.holes and
+        return (set(self.terminal_positions.values()) <= board.holes and
                 set(self.occupies) <= board.spaces)
 
 class Board():
