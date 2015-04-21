@@ -30,9 +30,9 @@ maximum length of 2. There should be 12 solutions in total.
 import component
 import placer
 
-r1 = component.LeadedComponent(2)
-r2 = component.LeadedComponent(1)
-r3 = component.LeadedComponent(1)
+r1 = component.LeadedComponent("R1", 2)
+r2 = component.LeadedComponent("R2", 1)
+r3 = component.LeadedComponent("R3", 1)
 
 board = component.StripBoard((3, 3))
 
@@ -43,8 +43,6 @@ nets = (
 )
 
 for placement in placer.place(board, (r1, r2, r3), nets):
-    print("R1: {}".format(placement[r1]))
-    print("R2: {}".format(placement[r2]))
-    print("R3: {}".format(placement[r3]))
+    placement.print_solution()
     print()
 

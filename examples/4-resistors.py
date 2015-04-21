@@ -20,22 +20,22 @@
 #     USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 """
-A simple example, placing 4 resistors in a loop on a 2x4 strip board.
+A simple example, placing 4 resistors in a loop on a 3x4 strip board.
 
 Three of the resistors have a maximum length of 1, whereas the other has a
-maximum length of 3. There should be 4 solutions in total.
+maximum length of 3. There should be 12 solutions in total.
 
 """
 
 import component
 import placer
 
-r1 = component.LeadedComponent(3)
-r2 = component.LeadedComponent(1)
-r3 = component.LeadedComponent(1)
-r4 = component.LeadedComponent(1)
+r1 = component.LeadedComponent("R1", 3)
+r2 = component.LeadedComponent("R2", 1)
+r3 = component.LeadedComponent("R3", 1)
+r4 = component.LeadedComponent("R4", 1)
 
-board = component.StripBoard((2, 4))
+board = component.StripBoard((3, 4))
 
 nets = (
     (r1.terminals[1], r2.terminals[0]),
@@ -45,9 +45,6 @@ nets = (
 )
 
 for placement in placer.place(board, (r1, r2, r3, r4), nets):
-    print("R1: {}".format(placement[r1]))
-    print("R2: {}".format(placement[r2]))
-    print("R3: {}".format(placement[r3]))
-    print("R4: {}".format(placement[r4]))
+    placement.print_solution()
     print()
 
