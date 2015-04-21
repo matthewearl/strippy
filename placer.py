@@ -24,20 +24,6 @@ __all__ = (
 
 import cnf
 
-class _HashableDict():
-    """
-    A dumb wrapper around a dict to make it hashable.
-
-    The hash is just the id() so don't use in sets/dicts if you want different
-    objects with the same value to have only one entry.
-
-    """
-    def __init__(self, position):
-        self.position = position
-
-    def __getitem__(self, key):
-        return self.position[key]
-
 def place(board, components, nets):
     """
     Place components on a board, according to a net list.
@@ -57,11 +43,11 @@ def place(board, components, nets):
     # Modify all objects that we wish to use as keys below such that they are
     # hashable, and unpack iterables into lists.
     nets = [frozenset(net) for net in nets]
-    positions = {c: [_HashableDict(p) for p in c.get_positions(board)]
-                                                           for c in components}
+    positions = {c: list(c.get_positions(board)) for c in components}
     components = list(components)
     terminals = [t for c in components for t in c.terminals]
     holes = board.holes
+    spaces = board.spaces
 
     # A lookup used below, which gives the net corresponding with a 
     terminal_to_net = {t: net for net in nets for t in net}
@@ -70,53 +56,61 @@ def place(board, components, nets):
     #  - position_vars[comp, pos] is true iff component `comp` is in position
     #    `pos`.
     #  - net_vars[hole, net] is true iff hole `net` is part of the net `net`.
-    #  - grid_vars[comp, hole] if component `comp` is occupying hole `hole`.
+    #  - occ_vars[cell, comp] if component `comp` is occupying cell `cell`.
     position_vars = {(comp, pos): cnf.Var()
                              for comp in components for pos in positions[comp]}
     net_vars = {(hole, net): cnf.Var() for hole in holes for net in nets}
-    grid_vars = {(term, hole): cnf.Var()
-                     for term in terminals
-                     for hole in holes}
+    occ_vars = {(cell, comp): cnf.Var()
+                    for cell in spaces
+                    for comp in components}
 
-    # Build up a CNF expression:
-    #  - A component must be in exactly one position.
-    #  - If a hole that is part of a trace is in a net, then the other hole in
-    #    the trace is also in that net, and vice versa.
-    #  - At most one terminal can be in a given hole.
-    #  - Each hole can be part of at most one net.
-    #  - If a component is in a particular position, then each hole occupied by
-    #    a terminal of the component must be part of the net corresponding with
-    #    that terminal.
-    #  - If a component is in a particular position, then the holes
-    #    corresponding with its terminals are considered occupied by that
-    #    terminal.
-    #    TODO: Encode physical hole occupation info, to avoid components
-    #    overlapping at non-terminal locations.
-    #  - Each terminal can appear in at most one hole.
-    expr = cnf.Expr.all(cnf.exactly_one(position_vars[comp, pos]
-                                                    for pos in positions[comp])
-                             for comp in components)
-    expr |= cnf.Expr.all(cnf.iff(net_vars[h1, net], net_vars[h2, net])
-                             for h1, h2 in board.traces for net in nets)
-    expr |= cnf.Expr.all(cnf.at_most_one(grid_vars[term, hole]
-                                                         for term in terminals)
-                             for hole in holes)
-    expr |= cnf.Expr.all(cnf.at_most_one(net_vars[hole, net] for net in nets)
-                             for hole in holes)
+    # Build up a CNF expression.
+
+    # If a component is in a particular position, then each hole occupied by a
+    # terminal of the component must be part of the net corresponding with that
+    # terminal.
     expr |= cnf.Expr.all(cnf.implies(position_vars[comp, pos],
                                      net_vars[pos[term],
                                                         terminal_to_net[term]])
                              for comp in components
                              for pos in positions[comp]
                              for term in comp.terminals)
+
+    # A component must be in exactly one position.
+    expr = cnf.Expr.all(cnf.exactly_one(position_vars[comp, pos]
+                                                    for pos in positions[comp])
+                             for comp in components)
+
+    # If a hole that is part of a trace is in a net, then the other hole in the
+    # trace is also in that net, and vice versa.
+    expr |= cnf.Expr.all(cnf.iff(net_vars[h1, net], net_vars[h2, net])
+                             for h1, h2 in board.traces for net in nets)
+
+    # Each hole can be part of at most one net.
+    expr |= cnf.Expr.all(cnf.at_most_one(net_vars[hole, net] for net in nets)
+                             for hole in holes)
+
+    # If a component is in a particular position, then the corresponding cells
+    # should be considered occupied by that component.
     expr |= cnf.Expr.all(cnf.implies(position_vars[comp, pos],
-                                     grid_vars[term, pos[term]])
+                                     occ_vars[cell, comp])
                              for comp in components
                              for pos in positions[comp]
-                             for term in comp.terminals)
-    expr |= cnf.Expr.all(cnf.at_most_one(grid_vars[term, hole]
-                                                             for hole in holes)
-                             for term in terminals)
+                             for cell in pos.occupies)
+
+    # If a given cell is occupied by a component, then the component must be in
+    # a position that occupies that cell.
+    expr |= cnf.Expr(cnf.Clause({Term(occ_vars[cell, comp], negated=True)} |
+                                {Term(position_vars[comp, pos])
+                                                      for pos in comp.positions
+                                                      if cell in pos.spaces})
+                        for comp in components
+                        for cell in spaces)
+
+    # A cell can be occupied by at most one component.
+    expr |= cnf.Expr.all(cnf.at_most_one(occ_vars[cell, comp]
+                                                        for comp in components)
+                             for cell in spaces)
 
     # Find solutions and map each one back to a mapping of components to
     # positions.

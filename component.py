@@ -27,40 +27,80 @@ __all__ = (
     'Board',
     'Component',
     'LeadedComponent',
+    'Position',
     'StripBoard',
     'Terminal',
 )
 
 import abc
 
+class Position():
+    """
+    A position represents the position of a component on a board.
+
+    Attributes:
+        occupies: Space occupied by the component in this position. This is a
+            set of (x, y) coordinates, each representing a cell that is
+            occupied.
+        terminal_positions: Mapping of terminals to their positions.
+
+    """
+
+    def __init__(self, occupies, terminal_positions):
+        self.occupies = set(occupies)
+        self.terminal_positions = dict(terminal_positions)
+
+    def __add__(self, offset):
+        """
+        Return a position that is a translation of this position.
+
+        offset: x, y offset.
+
+        """
+        x_offs, y_offs = offset
+        offset_occupies = {(x + x_offs, y + y_offs)
+                                                   for (x, y) in self.occupies}
+        offset_terminal_positions = {t: (x + x_offs, y + y_offs)
+                                        for t, (x, y) in
+                                               self.terminal_positions.items()}
+
+        return Position(offset_occupies, offset_terminal_positions) 
+
+    def fits(self, board):
+        """
+        Indicate whether this position fits on the board.
+
+        Ie. check that there are holes for the terminals, and check that there
+        is a space on the board for each cell that the component occupies.
+
+        """
+        return (set(terminal_positions.values()) <= board.holes and
+                set(self.occupies) <= board.spaces)
+
 class Board():
     """
     Base class for a grid-based prototyping board.
 
     Attributes:
-        size: (width, height) pair giving the width and height of the board in
-            terms of the number of holes in either dimension.
         holes: Set of (x, y) pairs indicating the coordinates of holes in the
             board: If a pair (x, y) is in the set then the board has a hole at
             this position.
+        spaces: Coordinates of cells that have space for components to be
+            placed: If a pair (x, y) is in the set then the board has room for
+            a component at grid cell (x, y).
         traces: A list of pairs of holes that are conductively connected.
 
     """
-    def __init__(self, size, holes, traces):
+    def __init__(self, holes, spaces, traces):
         """
         Initialize the object.
 
         Arguments initialize the object's attributes.
 
         """
-        self.size = tuple(size)
         self.holes = set(holes)
         self.traces = set(tuple(sorted(hole_pair)) for hole_pair in traces)
-
-        # Check each hole is within the bounds of the board.
-        if not all(0 <= x < size[0] and 0 <= y < size[1] for (x, y) in
-                   self.holes):
-            raise ValueError
+        self.spaces = set(spaces)
 
         # Check all holes in the traces are holes in the board.
         if not {h for t in self.traces for h in t} <= self.holes:
@@ -76,7 +116,8 @@ class StripBoard(Board):
         holes = [(x, y) for y in range(size[1]) for x in range(size[0])]
         traces = [((x, y), (x + 1, y))
                     for y in range(size[1]) for x in range(size[0] - 1)]
-        super().__init__(size, holes, traces)
+        spaces = holes
+        super().__init__(holes, spaces, traces)
 
 class Terminal():
     """
@@ -120,18 +161,15 @@ class Component(metaclass=abc.ABCMeta):
         positions. Each (x, y) position is a hole in the board.
 
         """
-        for hx, hy in board.holes:
+        for hole_pos in board.holes:
             for rel_pos in self.get_relative_positions():
-                abs_pos = {terminal: (hx + x, hy + y)
-                            for terminal, (x, y) in rel_pos.items()}
-
-                if all(v in board.holes for v in abs_pos.values()):
+                abs_pos = rel_pos + hole_pos
+                if abs_pos.fits(board):
                     yield abs_pos
 
 class LeadedComponent(Component):
     """
-    Class for leaded components.
-
+    Class for leaded components.  
     For example, through-hole resistors, diodes, capacitors.
 
     """
@@ -150,13 +188,17 @@ class LeadedComponent(Component):
     def get_relative_positions(self):
         for length in range(1, self._max_length + 1):
             if self._allow_vertical:
-                yield {self.terminals[0]: (0, 0),
-                       self.terminals[1]: (length, 0)}
-                yield {self.terminals[1]: (0, 0),
-                       self.terminals[0]: (length, 0)}
+                yield Position({(0, y) for y in range(length + 1)},
+                               {self.terminals[0]: (0, 0),
+                                self.terminals[1]: (0, length)})
+                yield Position({(0, y) for y in range(-length, 1)},
+                               {self.terminals[0]: (0, 0),
+                                self.terminals[1]: (0, -length)})
             if self._allow_horizontal:
-                yield {self.terminals[0]: (0, 0),
-                       self.terminals[1]: (0, length)}
-                yield {self.terminals[1]: (0, 0),
-                       self.terminals[0]: (0, length)}
+                yield Position({(x, 0) for x in range(length + 1)},
+                               {self.terminals[0]: (0, 0),
+                                self.terminals[1]: (length, 0)})
+                yield Position({(x, 0) for x in range(-length, 1)},
+                               {self.terminals[0]: (0, 0),
+                                self.terminals[1]: (-length, 0)})
 
