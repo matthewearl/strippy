@@ -27,7 +27,7 @@ Trivial example, placing a single resistor on a 2x2 strip board.
 import component
 import placer
 
-r1 = component.LeadedComponent(1)
+r1 = component.LeadedComponent("R1", 1)
 
 board = component.StripBoard((2, 2))
 
@@ -37,6 +37,6 @@ nets = (
 )
 
 for placement in placer.place(board, (r1,), nets):
-    print("R1: {}".format(placement[r1]))
+    placement.print_solution()
     print()
 

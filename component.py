@@ -123,8 +123,13 @@ class Terminal():
     """
     Object to represent a terminal of given component object.
 
+    Attributes:
+        label: Label used for displaying this terminal. The terminal will
+               always be displayed in the context of its component, so the
+               component need not be described here.
     """
-    pass
+    def __init__(self, label):
+        self.label = str(label)
 
 class Component(metaclass=abc.ABCMeta):
     """
@@ -136,9 +141,14 @@ class Component(metaclass=abc.ABCMeta):
     A position is defined by a mapping of the component's terminals to (x, y)
     coordinates. See methods for more information.
 
+    Attributes:
+        label: Label used for displaying thie component.
+        terminals: Iterable of terminals tht belong to this component.
+
     """
-    def __init__(self, terminals):
-        self.terminals = list(terminals)
+    def __init__(self, label, terminals):
+        self.label = str(label)
+        self.terminals = tuple(terminals)
     
     @abc.abstractmethod
     def get_relative_positions(self):
@@ -174,16 +184,16 @@ class LeadedComponent(Component):
 
     """
 
-    def __init__(self, max_length, *,
+    def __init__(self, label, max_length, *,
                  allow_vertical=True,
                  allow_horizontal=True):
-        terminals = (Terminal(), Terminal())
+        terminals = (Terminal(1), Terminal(2))
 
         self._max_length = max_length
         self._allow_horizontal = allow_horizontal
         self._allow_vertical = allow_vertical
 
-        super().__init__(terminals)
+        super().__init__(label, terminals)
 
     def get_relative_positions(self):
         for length in range(1, self._max_length + 1):

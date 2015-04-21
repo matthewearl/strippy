@@ -20,9 +20,34 @@
 
 __all__ = (
     'place',
+    'Placement',
 )
 
 import cnf
+
+class Placement():
+    """
+    A solution yielded by `place`.
+
+    This is a mapping of components to positions, with some utility methods.
+
+    """
+
+    def __init__(self, mapping):
+        self._mapping = mapping
+
+    def __getitem__(self, key):
+        return self._mapping[key]
+
+    def print_solution(self):
+        comps = list(sorted(self._mapping.keys(),
+                            key=(lambda comp: comp.label)))
+        for comp in comps:
+            pos = self[comp]
+            print("{}: {}".format(comp.label,
+                ", ".join("{}:{}".format(terminal.label,
+                                         pos.terminal_positions[terminal])
+                                         for terminal in comp.terminals)))
 
 def place(board, components, nets):
     """
@@ -120,5 +145,5 @@ def place(board, components, nets):
         # If this fails the "exactly one position" constraint has been
         # violated.
         assert len(mapping) == len(components)
-        yield mapping
+        yield Placement(mapping)
         
