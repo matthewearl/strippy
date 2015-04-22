@@ -26,6 +26,7 @@ Trivial example, placing a single resistor on a 2x2 strip board.
 
 import component
 import placer
+import svg
 
 r1 = component.LeadedComponent("R1", 1)
 
@@ -36,7 +37,10 @@ nets = (
     (r1.terminals[1],),
 )
 
-for placement in placer.place(board, (r1,), nets):
+for idx, placement in enumerate(placer.place(board, (r1,), nets)):
     placement.print_solution()
     print()
+
+    with open("placement{}.svg".format(idx), "w") as f:
+        svg.print_svg(placement, file=f)
 

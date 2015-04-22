@@ -18,6 +18,12 @@
 #     OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 #     USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+""" 
+This module contains routines finding placements for components on a circuit
+board.
+
+"""
+
 __all__ = (
     'place',
     'Placement',
@@ -33,7 +39,8 @@ class Placement():
 
     """
 
-    def __init__(self, mapping):
+    def __init__(self, board, mapping):
+        self.board = board
         self._mapping = mapping
 
     def __getitem__(self, key):
@@ -145,5 +152,5 @@ def place(board, components, nets):
         # If this fails the "exactly one position" constraint has been
         # violated.
         assert len(mapping) == len(components)
-        yield Placement(mapping)
+        yield Placement(board, mapping)
         
