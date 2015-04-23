@@ -29,9 +29,11 @@ __all__ = (
     'Placement',
 )
 
+import collections.abc
+
 import cnf
 
-class Placement():
+class Placement(collections.abc.Mapping):
     """
     A solution yielded by `place`.
 
@@ -45,6 +47,12 @@ class Placement():
 
     def __getitem__(self, key):
         return self._mapping[key]
+
+    def __iter__(self):
+        return iter(self._mapping)
+
+    def __len__(self):
+        return len(self._mapping)
 
     def print_solution(self):
         comps = list(sorted(self._mapping.keys(),

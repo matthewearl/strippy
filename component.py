@@ -146,9 +146,10 @@ class Component(metaclass=abc.ABCMeta):
         terminals: Iterable of terminals tht belong to this component.
 
     """
-    def __init__(self, label, terminals):
+    def __init__(self, label, terminals, color="#008000"):
         self.label = str(label)
         self.terminals = tuple(terminals)
+        self.color = color
     
     @abc.abstractmethod
     def get_relative_positions(self):

@@ -31,17 +31,23 @@ __all__ = (
 import sys
 
 _LINE_WIDTH = 1.
-_PIXELS_PER_GRID_CELL = 30.
+_GRID_CELL_SIZE = 30.
 _HOLE_RADIUS = 5.
-_HOLE_COLOR = "black"
-_TRACE_COLOR = "black"
+_TERMINAL_RADIUS = 10
+_HOLE_COLOR = "gray"
+_TRACE_COLOR = "gray"
+_FONT_SIZE = 5
+_FONT_COLOR = "black"
+_FONT_FAMILY = "Verdana"
+_OCCUPY_SIZE = 20
+_OCCUPY_OPACITY = 0.5
 
 def _grid_coords_to_pixel(coords, center=False):
     x, y = coords
     if center:
         x += 0.5
         y += 0.5
-    return (x * _PIXELS_PER_GRID_CELL, y * _PIXELS_PER_GRID_CELL)
+    return (x * _GRID_CELL_SIZE, y * _GRID_CELL_SIZE)
 
 def _make_hole_mask(holes, file=sys.stdout):
     print('<mask id="hole-mask">', file=file)
@@ -72,12 +78,72 @@ def _draw_trace(t, file=sys.stdout):
             _TRACE_COLOR, _LINE_WIDTH),
           file=file)
 
+def _draw_component_terminals(comp, pos, file=sys.stdout):
+    for terminal, hole in pos.terminal_positions.items():
+        center = _grid_coords_to_pixel(hole, center=True)
+
+        print('<circle cx="{}" cy="{}" r="{}" stroke="{}" '
+              'stroke-width="{}" fill="transparent" />'.format(
+                  center[0], center[1], _TERMINAL_RADIUS, comp.color,
+                  _LINE_WIDTH),
+              file=file)
+
+        print('<text x="{}" y="{}" font-family="{}" font-size="{}" '
+              'color="{}">{}</text>'.format(
+                  center[0], center[1], _FONT_FAMILY, _FONT_SIZE, _FONT_COLOR,
+                  terminal.label),
+              file=file)
+
+def _draw_component_label(comp, pos, file=sys.stdout):
+    top_left_cell = tuple(min(c[i] for c in pos.occupies) for i in range(2))
+    top_left_pixel = _grid_coords_to_pixel(top_left_cell)
+
+    print('<text x="{}" y="{}" font-family="{}" font-size="{}" '
+          'color="{}">{}</text>'.format(
+              top_left_pixel[0], top_left_pixel[1] + _FONT_SIZE, _FONT_FAMILY,
+              _FONT_SIZE, _FONT_COLOR, comp.label),
+          file=file)
+
+def _draw_component_occupies(comp, pos, file=sys.stdout):
+    """
+    Draw a translucent region over cells that are occupied by a component.
+
+    However, don't draw near edges of the region.
+
+    """
+    for cell in pos.occupies:
+        top_left = _grid_coords_to_pixel(cell)
+
+        xs = [top_left[0],
+              top_left[0] + (_GRID_CELL_SIZE/2. - _OCCUPY_SIZE/2.),
+              top_left[0] + (_GRID_CELL_SIZE/2. + _OCCUPY_SIZE/2.),
+              top_left[0] + _GRID_CELL_SIZE]
+        ys = [top_left[1],
+              top_left[1] + (_GRID_CELL_SIZE/2. - _OCCUPY_SIZE/2.),
+              top_left[1] + (_GRID_CELL_SIZE/2. + _OCCUPY_SIZE/2.),
+              top_left[1] + _GRID_CELL_SIZE]
+
+        for y_offset in (-1, 0, 1):
+            for x_offset in (-1, 0, 1):
+                if (cell[0] + x_offset, cell[1] + y_offset) in pos.occupies:
+                    print('<rect x="{}" y="{}" width="{}" height="{}" '
+                          'fill="{}" fill-opacity="{}" />'.format(
+                              xs[1 + x_offset],
+                              ys[1 + y_offset],
+                              xs[2 + x_offset] - xs[1 + x_offset],
+                              ys[2 + y_offset] - ys[1 + y_offset],
+                              comp.color,
+                              _OCCUPY_OPACITY),
+                         file=file)
+
 def print_svg(placement, file=sys.stdout):
 
-    size = tuple(_PIXELS_PER_GRID_CELL * (1 + max(h[i] 
+    size = tuple(_GRID_CELL_SIZE * (1 + max(h[i] 
                                                for h in placement.board.holes))
                  for i in (0, 1))
-    print('<svg width="{}" height="{}">'.format(size[0], size[1]), file=file)
+    print('<svg width="{}" height="{}" '
+          'xmlns="http://www.w3.org/2000/svg">'.format(
+                                                  size[0], size[1]), file=file)
 
     _make_hole_mask(placement.board.holes, file=file)
 
@@ -86,5 +152,11 @@ def print_svg(placement, file=sys.stdout):
 
     for trace in placement.board.traces:
         _draw_trace(trace, file=file)
+
+    for comp, pos in placement.items():
+        _draw_component_terminals(comp, pos, file=file)
+        _draw_component_occupies(comp, pos, file=file)
+        _draw_component_label(comp, pos, file=file)
+
     print('</svg>', file=file)
 
