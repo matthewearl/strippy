@@ -28,13 +28,13 @@ maximum length of 3. There should be 12 solutions in total.
 """
 
 import component
-import placer
-import svg
+import cli
 
 r1 = component.LeadedComponent("R1", 3)
 r2 = component.LeadedComponent("R2", 1)
 r3 = component.LeadedComponent("R3", 1)
 r4 = component.LeadedComponent("R4", 1)
+components = (r1, r2, r3, r4)
 
 board = component.StripBoard((3, 4))
 
@@ -45,9 +45,4 @@ nets = (
     (r4.terminals[1], r1.terminals[0]),
 )
 
-for idx, placement in enumerate(placer.place(board, (r1, r2, r3, r4), nets)):
-    placement.print_solution()
-    print()
-
-    with open("placement{}.svg".format(idx), "w") as f:
-        svg.print_svg(placement, file=f)
+cli.main(board, components, nets)

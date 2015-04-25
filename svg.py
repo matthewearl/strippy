@@ -114,6 +114,8 @@ def _draw_component_occupies(comp, pos, file=sys.stdout):
     for cell in pos.occupies:
         top_left = _grid_coords_to_pixel(cell)
 
+        # There's a grid of 9 rectangles which may be drawn, depending on
+        # which neighbouring cells the component also occupies.
         xs = [top_left[0],
               top_left[0] + (_GRID_CELL_SIZE/2. - _OCCUPY_SIZE/2.),
               top_left[0] + (_GRID_CELL_SIZE/2. + _OCCUPY_SIZE/2.),

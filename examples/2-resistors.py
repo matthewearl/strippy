@@ -25,10 +25,11 @@ Simple example, placing 2 resistors in parallel on a 2x2 strip board.
 """
 
 import component
-import placer
+import cli
 
 r1 = component.LeadedComponent("R1", 1)
 r2 = component.LeadedComponent("R2", 1)
+components = (r1, r2)
 
 board = component.StripBoard((2, 2))
 
@@ -37,7 +38,4 @@ nets = (
     (r1.terminals[1], r2.terminals[1]),
 )
 
-for placement in placer.place(board, (r1, r2), nets):
-    placement.print_solution()
-    print()
-
+cli.main(board, components, nets)

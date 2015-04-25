@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Copyright (c) 2015 Matthew Earl
 # 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -20,27 +19,36 @@
 #     USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 """
-A simple example, placing 3 resistors in a loop on a 3x3 strip board.
-
-Two of the resistors have a maximum length of 1, whereas the other has a
-maximum length of 2. There should be 12 solutions in total.
+Command line interface for solving a placement problem.
 
 """
 
-import component
-import cli
-
-r1 = component.LeadedComponent("R1", 2)
-r2 = component.LeadedComponent("R2", 1)
-r3 = component.LeadedComponent("R3", 1)
-components = (r1, r2, r3)
-
-board = component.StripBoard((3, 3))
-
-nets = (
-    (r1.terminals[1], r2.terminals[0]),
-    (r2.terminals[1], r3.terminals[0]),
-    (r3.terminals[1], r1.terminals[0]),
+__all__ = (
+    'main',
 )
 
-cli.main(board, components, nets)
+import argparse
+import sys
+
+import placer
+import svg
+
+def main(board, components, nets, args=None):
+    parser = argparse.ArgumentParser( description='Find circuit placements.')
+    parser.add_argument('--svg', action='store_true',
+                        help="Output SVG for the first solution")
+    parsed_args = parser.parse_args(args if args is not None else sys.argv[1:])
+
+    placement_iter = placer.place(board, components, nets)
+
+    if not parsed_args.svg:
+        count = 0
+        for placement in placement_iter:
+            placement.print_solution()
+            print()
+            count += 1
+        print("{} solutions".format(count))
+    else:
+        placement = next(placement_iter)
+        svg.print_svg(placement)
+    
