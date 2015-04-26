@@ -29,7 +29,7 @@ import cli
 
 r1 = component.LeadedComponent("R1", 1)
 
-board = component.StripBoard((2, 2))
+board = component.StripBoard((1, 2))
 
 nets = (
     (r1.terminals[0],),

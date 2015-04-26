@@ -123,6 +123,9 @@ class Terminal():
     """
     Object to represent a terminal of given component object.
 
+    Terminals of distinct components must not be equal. Ie. c1 != c2 => t1 !=
+    t2, for all components c1, c2, t1 a terminal in c1, t2 a terminal in c2.
+
     Attributes:
         label: Label used for displaying this terminal. The terminal will
                always be displayed in the context of its component, so the
@@ -130,6 +133,21 @@ class Terminal():
     """
     def __init__(self, label):
         self.label = str(label)
+        self.component = None
+
+    def _set_component(self, component):
+        """
+        Set the component. It should only be set once, and only by
+        Component.__init__().
+
+        A single terminal cannot belong to multiple components.
+
+        """
+        assert self.component is None
+        self.component = component
+
+    def __str__(self):
+        return "{}[{}]".format(self.component.label, self.label)
 
 class Component(metaclass=abc.ABCMeta):
     """
@@ -149,6 +167,8 @@ class Component(metaclass=abc.ABCMeta):
     def __init__(self, label, terminals, color="#008000"):
         self.label = str(label)
         self.terminals = tuple(terminals)
+        for terminal in self.terminals:
+            terminal._set_component(self)
         self.color = color
     
     @abc.abstractmethod
@@ -177,6 +197,9 @@ class Component(metaclass=abc.ABCMeta):
                 abs_pos = rel_pos + hole_pos
                 if abs_pos.fits(board):
                     yield abs_pos
+
+    def __str__(self):
+        return self.label
 
 class LeadedComponent(Component):
     """
