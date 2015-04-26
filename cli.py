@@ -37,7 +37,7 @@ def main(board, components, nets, args=None):
     parser = argparse.ArgumentParser( description='Find circuit placements.')
     parser.add_argument('--first-only', action='store_true',
                         help="Only output the first solution")
-    parser.add_argument('--svg', action='store_true',
+    parser.add_argument('--svg', nargs='?', const=True,
                         help="Output SVG for the solutions")
     parsed_args = parser.parse_args(args if args is not None else sys.argv[1:])
 
@@ -54,5 +54,10 @@ def main(board, components, nets, args=None):
             count += 1
         print("{} solutions".format(count))
     else:
-        svg.print_svg(placement_iter)
+        if isinstance(parsed_args.svg, str):
+            with open(parsed_args.svg, "w") as f:
+                svg.print_svg(placement_iter, file=f)
+        else:
+            svg.print_svg(placement_iter, file=sys.stdout)
+
     
