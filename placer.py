@@ -75,85 +75,199 @@ def place(board, components, nets):
         condutively connected.
 
     Yields:
-        A dict of component to position mappings, which represents a placement
-        of the components which satisfies the net list.
+        Placements which satify the input constraints.
 
     """
 
-    # Modify all objects that we wish to use as keys below such that they are
-    # hashable, and unpack iterables into lists.
-    nets = [frozenset(net) for net in nets]
-    positions = {c: list(c.get_positions(board)) for c in components}
+    # Unpack arguments incase the caller provided a generator (or other
+    # one-time iterable), so they can be re-iterated and subscripted in this
+    # function.
+    nets = [list(net) for net in nets]
     components = list(components)
-    terminals = [t for c in components for t in c.terminals]
-    holes = board.holes
-    spaces = board.spaces
 
-    # A lookup used below, which gives the net corresponding with a 
-    terminal_to_net = {t: net for net in nets for t in net}
+    # Position objects that represent the same position may have different
+     hashes (their hash function is the default id based implementation).
+    
+    # Allow the positions to be hashed correctly by using only one Position for
+    # each component position within this function.
+    positions = {c: list(c.get_positions(board)) for c in components}
 
-    # Set up variables.
-    #  - position_vars[comp, pos] is true iff component `comp` is in position
-    #    `pos`.
-    #  - net_vars[hole, net] is true iff hole `net` is part of the net `net`.
-    #  - occ_vars[cell, comp] if component `comp` is occupying cell `cell`.
-    position_vars = {(comp, pos): cnf.Var()
-                             for comp in components for pos in positions[comp]}
-    net_vars = {(hole, net): cnf.Var() for hole in holes for net in nets}
-    occ_vars = {(cell, comp): cnf.Var()
-                    for cell in spaces
-                    for comp in components}
+    def physical_constraints():
+        """
+        Produce a CNF expression to enforce physical constraints.
 
-    # Build up a CNF expression.
+        Ie. There must not be multiple components that occupy a given space.
 
-    # A component must be in exactly one position.
-    expr = cnf.Expr.all(cnf.exactly_one(position_vars[comp, pos]
-                                                    for pos in positions[comp])
-                             for comp in components)
+        """
+        # Useful dicts for generating the CNF expression.
+        positions_which_occupy = {(c, s): p
+                                  for c in components
+                                  for p in positions[c]
+                                  for s in occupies}
 
-    # If a component is in a particular position, then each hole occupied by a
-    # terminal of the component must be part of the net corresponding with that
-    # terminal.
-    expr |= cnf.Expr.all(cnf.implies(position_vars[comp, pos],
-                                     net_vars[pos.terminal_positions[term],
-                                                        terminal_to_net[term]])
-                             for comp in components
-                             for pos in positions[comp]
-                             for term in comp.terminals)
+        # Make internal variables to determine whether a given component is in
+        # a particular space.
+        occ = {(c, s): cnf.Var() for s in spaces for c in components}
 
-    # If a hole that is part of a trace is in a net, then the other hole in the
-    # trace is also in that net, and vice versa.
-    expr |= cnf.Expr.all(cnf.iff(net_vars[h1, net], net_vars[h2, net])
-                             for h1, h2 in board.traces for net in nets)
+        # Generate constraints to enforce the definition of `occ`. occ[s, c] is
+        # true iff there is a position `p` for `c` which covers `s` such that
+        # comp_pos[c, p] is true. The first line handles the forward
+        # implication, and the second the converse.
+        occ_constraints = cnf.Expr(
+            cnf.Clause({cnf.Term(occ[c, s], negated=True)} |
+                       {cnf.Term(comp_pos[c, p])
+                                        for p in positions_which_occupy[c, s]})
+                    for c in components
+                    for s in board.spaces)
+        occ_constraints |= cnf.Expr(
+            cnf.Clause({cnf.Term(comp_pos[c, p], negated=True),
+                        cnf.Term(occ[c, s])})
+                    for c in components
+                    for s in board.spaces
+                    for p in positions_which_occupy[c, s])
 
-    # Each hole can be part of at most one net.
-    expr |= cnf.Expr.all(cnf.at_most_one(net_vars[hole, net] for net in nets)
-                             for hole in holes)
+        # Enforce that at most one component can occupy a space.
+        one_component_per_space = cnf.Expr.all(
+                                 cnf.at_most_one(occ[c, s] for c in components)
+                    for s in board.spaces)
 
-    # If a component is in a particular position, then the corresponding cells
-    # should be considered occupied by that component.
-    expr |= cnf.Expr.all(cnf.implies(position_vars[comp, pos],
-                                     occ_vars[cell, comp])
-                             for comp in components
-                             for pos in positions[comp]
-                             for cell in pos.occupies)
+        # Return all of the above.
+        return occ_constraints | one_component_per_space
 
-    # If a given cell is occupied by a component, then the component must be in
-    # a position that occupies that cell.
-    expr |= cnf.Expr(cnf.Clause({cnf.Term(occ_vars[cell, comp], negated=True)}
-                                | {cnf.Term(position_vars[comp, pos])
-                                                     for pos in positions[comp]
-                                                     if cell in pos.occupies})
-                        for comp in components
-                        for cell in spaces)
+    def continuity_constraints():
+        """
+        Produce a CNF expression to enforce electrical continuity constraints.
 
-    # A cell can be occupied by at most one component.
-    expr |= cnf.Expr.all(cnf.at_most_one(occ_vars[cell, comp]
-                                                        for comp in components)
-                             for cell in spaces)
+        Ie. continuity between terminals that are in a common net, and
+        discontinuity between terminals that are in different nets.
 
-    # Find solutions and map each one back to a mapping of components to
-    # positions.
+        """
+        # Useful dicts used for generating the CNF expression.
+        neighbours = {h1: h2 for a, b in board.traces
+                                                for h1, h2 in ((a, b), (b, a))}
+        hole_for_term = {(pos, term): pos.terminal_positions[term]
+                            for comp in components
+                            for pos in positions[c]}
+
+        # Make internal variables to determine which nodes are reachable from
+        # which by paths less than or equal to a given length.
+        conn = {(h1, h2, i): cnf.Var()
+                        for h1 in board.holes
+                        for h2 in board.holes
+                        for i in range(len(board.holes))}
+
+        # Make some more internal variables which indicate whether a terminal
+        # is in a particular hole.
+        term_hole = {(comp, term, hole): cnf.Var()
+                        for comp in comps
+                        for term in comp.terminals
+                        for hole in board.holes} 
+
+        # Create extra entries in the dict which maps to the vars which
+        # indicate connectivity by paths of any length. (In a board with N
+        # holes, two holes being connected is equivalent to them being
+        # connected by a path of length N - 1 or less.
+        conn.update({(h1, h2): conn_vars[h1, h2, len(board.holes) - 1]
+                                  for h1 in board.holes for h2 in board.holes})
+
+        # Generate constraints to enforce the definition of `conn` for paths of
+        # length 0. Two holes are connected by a path of a length 0 iff they
+        # are the same hole.
+        zero_length_constraints = cnf.Expr(
+            cnf.Clause({cnf.Term(conn[h1, h2, 0], negated=(h1 != h2))})
+                    for h1 in board.holes
+                    for h2 in board.holes)
+                
+        # Generate constraints to enforce the definition of `conn` for paths
+        # that are not of length 0. Two holes are connected by a path of length
+        # <= i iff they are connected by a path of length i - 1, or a neighbour
+        # of the first node is connected to the second node by a path of length
+        # i - 1. The first line handles the forward implication, and the second
+        # the converse.
+        non_zero_length_constraints = cnf.Expr(
+            cnf.Clause({cnf.Term(conn[h1, h2, i], negated=True),
+                        cnf.Term(conn[h1, h2, i - 1])} |
+                       {cnf.Term(conn[n, h2, i - 1]) for n in neighbours[h1]}),
+                    for h1 in board.holes
+                    for h2 in board.holes
+                    for i in range(1, len(board.holes) - 1))
+        non_zero_length_constraints |= cnf.Expr(
+            {cnf.Clause({cnf.Term(conn[h1, h2, i - 1], negated=True),
+                         cnf.Term(conn[h1, h2, i])})} |
+            {cnf.Clause({cnf.Term(conn[n, h2, i - 1], negated=True),
+                         cnf.Term(conn[h1, h2, i])})
+                                                       for n in neighbours[h1]}
+                    for h1 in board.holes
+                    for h2 in board.holes
+                    for i in range(1, len(board.holes) - 1))
+
+        # Add constraints which enforce the definition of `term_hole`. For aech
+        # component `c` and position `p`, comp_pos[c, p] should be true iff all
+        # of c's terminals `t` have term_hole true for the terminal's hole in
+        # that position. The first line handles the forward implication, and
+        # the second the converse.
+        term_hole_constraints = cnf.Expr(
+            cnf.Clause({cnf.Term(comp_pos[c, p], negated=True),
+                        cnf.Term(term_hole[t, hole_for_term[p, t]])})
+                    for c in components
+                    for p in positions[c]
+                    for t in c.terminals)
+        term_hole_constraints |= cnf.Expr(
+            cnf.Clause({cnf.Term(comp_pos[c, p])} |
+                       {cnf.Term(term_hole[t, hole_for_term[p, t]],
+                                 negated=True) for t in c.terminals})
+                    for c in components
+                    for p in positions[c])
+        
+        # Add constraints which ensure each terminal in a net is connected.
+        # Just check the first node is connected to all the others.
+        # Transitivity and reflexivity of connectedness should guarantee full
+        # connectedness.
+        net_continuity_constraints = cnf.Expr(
+            cnf.Clause({cnf.Term(term_hole[n[0], h1], negated=True),
+                        cnf.Term(term_hole[t2, h2], negated=True),
+                        cnf.Term(conn[h1, h2])}) 
+                    for n in nets
+                    for t2 in n[1:]
+                    for h1 in board.holes
+                    for h2 in board.holes)
+
+        # Add constraints which ensure that terminals in different nets are
+        # disconnected. Check all pairs of nets are disconnected, using only
+        # the first element.
+        net_discontinuity_constraints = cnf.Expr(
+            cnf.Clause({cnf.Term(term_hole[n1[0], h1], negated=True),
+                        cnf.Term(term_hole[n2[0], h2], negated=True),
+                        cnf.Term(conn[h1, h2], negated=True)}) 
+                    for idx, n1 in enumerate(nets)
+                    for n2 in nets[(idx + 1):]
+                    for h1 in board.holes
+                    for h2 in board.holes)
+
+        # Return all of the above.
+        return (zero_length_constraints |
+                non_zero_length_constraints |
+                term_hole_constraints |
+                net_continuity_constraints |
+                net_discontinuity_constraints)
+                        
+    # Make variables to indicate whether a component is in a particular
+    # position. Assignments for these variables will be used to produce
+    # placements.
+    comp_pos = {(comp, pos): cnf.Var() for comp in components
+                                        for pos in positions[comp]}
+
+
+    # Constrain the `comp_pos` variables such that a component must be in
+    # exactly one position.
+    one_pos_per_comp = cnf.Expr.all(cnf.exactly_one(comp_pos[comp, pos]
+                                               for pos in positions[comp])
+                                    for comp in components)
+
+    # Combine all the constraints into a single expression.
+    expr = one_pos_per_comp | physical_constraints() | continuity_constraints()
+
+    # Find solutions and map each one back to a Placement.
     for sol in cnf.solve(expr):
         mapping = {comp: pos
                      for (comp, pos), var in position_vars.items() if sol[var]}
@@ -162,3 +276,4 @@ def place(board, components, nets):
         assert len(mapping) == len(components)
         yield Placement(board, mapping)
         
+
