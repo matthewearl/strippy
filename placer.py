@@ -33,7 +33,7 @@ import collections.abc
 
 import cnf
 
-_DEBUG = True
+_DEBUG = False
 
 class Placement(collections.abc.Mapping):
     """
@@ -188,18 +188,18 @@ def place(board, components, nets):
                        {cnf.Term(conn[n, h2, i - 1]) for n in neighbours[h1]})
                     for h1 in board.holes
                     for h2 in board.holes
-                    for i in range(1, len(board.holes) - 1))
+                    for i in range(1, len(board.holes)))
         non_zero_length_constraints |= cnf.Expr(
             {cnf.Clause({cnf.Term(conn[h1, h2, i - 1], negated=True),
                          cnf.Term(conn[h1, h2, i])})
                     for h1 in board.holes
                     for h2 in board.holes
-                    for i in range(1, len(board.holes) - 1)} |
+                    for i in range(1, len(board.holes))} |
             {cnf.Clause({cnf.Term(conn[n, h2, i - 1], negated=True),
                          cnf.Term(conn[h1, h2, i])})
                     for h1 in board.holes
                     for h2 in board.holes
-                    for i in range(1, len(board.holes) - 1)
+                    for i in range(1, len(board.holes))
                     for n in neighbours[h1]})
 
         # Generate constraints to enforce the definition of `term_hole`.
