@@ -42,6 +42,7 @@ _FONT_FAMILY = "Verdana"
 _OCCUPY_SIZE = 40
 _OCCUPY_OPACITY = 0.5
 _PLACEMENT_SEP = 30
+_BORDER_COLOR = "black"
 
 def _grid_coords_to_pixel(coords, center=False):
     x, y = coords
@@ -138,18 +139,26 @@ def print_svg(placements, file=sys.stdout):
 
     widths, heights = zip(*(placement_size(placement)
                                                  for placement in placements))
-    doc_width = max(widths) 
-    doc_height = sum(heights) + _PLACEMENT_SEP * (len(placements) - 1)
+    doc_width = max(widths) + _PLACEMENT_SEP
+    doc_height = (sum(heights) + _PLACEMENT_SEP * (len(placements) - 1) +
+                    _PLACEMENT_SEP)
 
     print('<svg width="{}" height="{}" '
           'xmlns="http://www.w3.org/2000/svg">'.format(doc_width, doc_height),
           file=file)
 
-    vertical_offset = 0
+    vertical_offset = _PLACEMENT_SEP / 2
     for placement in placements:
-        print('<g transform="translate(0 {})">'.format(vertical_offset),
+        print('<g transform="translate({} {})">'.format(
+                                         _PLACEMENT_SEP / 2, vertical_offset),
               file=file)
 
+        size = placement_size(placement)
+
+        print('<rect x="0" y="0" width="{}" height="{}" '
+              'fill="transparent" stroke="{}" stroke-width="{}" />'.format(
+                      size[0], size[1], _BORDER_COLOR, _LINE_WIDTH),
+              file=file)
         for hole in placement.board.holes:
             _draw_hole(hole, file=file)
 
@@ -162,7 +171,7 @@ def print_svg(placements, file=sys.stdout):
             _draw_component_label(comp, pos, file=file)
 
         print('</g>', file=file)
-        vertical_offset += placement_size(placement)[1] + _PLACEMENT_SEP
+        vertical_offset += size[1] + _PLACEMENT_SEP
 
     print('</svg>', file=file)
 
