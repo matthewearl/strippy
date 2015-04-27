@@ -40,6 +40,8 @@ __all__ = (
     'Var',
 )
 
+import collections 
+
 import pycosat
 
 class Var():
@@ -119,6 +121,17 @@ class Expr():
 
     def __iter__(self):
         return iter(self.clauses)
+
+    @property
+    def stats(self):
+        num_clauses = len(self.clauses)
+        num_terms = sum(len(c.terms) for c in self.clauses)
+        num_vars = len({t.var for c in self.clauses for t in c.terms})
+
+        return collections.namedtuple('Stats', ('clauses', 'terms', 'vars'))(
+                          num_clauses,
+                          num_terms,
+                          num_vars)
 
     @staticmethod
     def all(cnfs):
