@@ -171,6 +171,9 @@ def place(board, components, nets):
             cnf.Clause({cnf.Term(conn[h1, h2, 0], negated=(h1 != h2))})
                     for h1 in board.holes
                     for h2 in board.holes)
+        if _DEBUG:
+            print("Zero length constraints: {}".format(
+                      zero_length_constraints.stats))
                 
         # Generate constraints to enforce the definition of `conn` for paths
         # that are not of length 0. Two holes are connected by a path of length
@@ -201,6 +204,9 @@ def place(board, components, nets):
                     for h2 in board.holes
                     for i in range(1, len(board.holes))
                     for n in neighbours[h1]})
+        if _DEBUG:
+            print("Non-zero length constraints: {}".format(
+                      non_zero_length_constraints.stats))
 
         # Generate constraints to enforce the definition of `term_hole`.
         # term_hole[t, h] is true iff there is a position `p` of `c` which
@@ -226,6 +232,9 @@ def place(board, components, nets):
                     for t in c.terminals
                     for h in board.holes
                     for p in positions_which_have_term_in[t, h])
+        if _DEBUG:
+            print("Term hole constraints: {}".format(
+                      term_hole_constraints.stats))
         
         # Add constraints which ensure each terminal in a net is connected.
         # Just check the first node is connected to all the others.
@@ -239,6 +248,9 @@ def place(board, components, nets):
                     for t2 in n[1:]
                     for h1 in board.holes
                     for h2 in board.holes)
+        if _DEBUG:
+            print("Net continuity constraints: {}".format(
+                      net_continuity_constraints.stats))
 
         # Add constraints which ensure that terminals in different nets are
         # disconnected. Check all pairs of nets are disconnected, using only
@@ -251,6 +263,9 @@ def place(board, components, nets):
                     for n2 in nets[(idx + 1):]
                     for h1 in board.holes
                     for h2 in board.holes)
+        if _DEBUG:
+            print("Net discontinuity constraints: {}".format(
+                      net_discontinuity_constraints.stats))
 
         # Return all of the above.
         return (zero_length_constraints |
@@ -276,9 +291,14 @@ def place(board, components, nets):
     # Combine all the constraints into a single expression.
     expr = one_pos_per_comp | physical_constraints() | continuity_constraints()
 
+    if _DEBUG:
+        print(expr.stats)
+        print("Solving!")
+
     # Find solutions and map each one back to a Placement.
     for sol in cnf.solve(expr):
         if _DEBUG:
+            print("Done")
             for var, val in sol.items():
                 print("{} {}".format("~" if not val else " ", var))
         mapping = {comp: pos
