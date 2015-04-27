@@ -143,134 +143,87 @@ def place(board, components, nets):
         discontinuity between terminals that are in different nets.
 
         """
-        # Make internal variables to determine which nodes are reachable from
-        # which by paths less than or equal to a given length.
-        conn = {(h1, h2, i): cnf.Var("{} conn {} <= {}".format(h1, h2, i))
-                        for h1 in board.holes
-                        for h2 in board.holes
-                        for i in range(len(board.holes))}
-
-        # Create extra entries in the dict which maps to the vars which
-        # indicate connectivity by paths of any length. (In a board with N
-        # holes, two holes being connected is equivalent to them being
-        # connected by a path of length N - 1 or less.
-        conn.update({(h1, h2): conn[h1, h2, len(board.holes) - 1]
-                                  for h1 in board.holes for h2 in board.holes})
-
-        # Make some more internal variables which indicate whether a terminal
-        # is in a particular hole.
-        term_hole = {(t, h): cnf.Var("{} in {}".format(t, h))
-                        for c in components
-                        for t in c.terminals
-                        for h in board.holes} 
-
-        # Generate constraints to enforce the definition of `conn` for paths of
-        # length 0. Two holes are connected by a path of a length 0 iff they
-        # are the same hole.
-        zero_length_constraints = cnf.Expr(
-            cnf.Clause({cnf.Term(conn[h1, h2, 0], negated=(h1 != h2))})
-                    for h1 in board.holes
-                    for h2 in board.holes)
-        if _DEBUG:
-            print("Zero length constraints: {}".format(
-                      zero_length_constraints.stats))
-                
-        # Generate constraints to enforce the definition of `conn` for paths
-        # that are not of length 0. Two holes are connected by a path of length
-        # <= i iff they are connected by a path of length i - 1, or a neighbour
-        # of the first node is connected to the second node by a path of length
-        # i - 1. The first line handles the forward implication, and the second
-        # the converse.
-        neighbours = {h1: [h2 for h2 in board.holes 
-                              if (h1, h2) in board.traces or
-                                 (h2, h1) in board.traces]
-                      for h1 in board.holes}
-        non_zero_length_constraints = cnf.Expr(
-            cnf.Clause({cnf.Term(conn[h1, h2, i], negated=True),
-                        cnf.Term(conn[h1, h2, i - 1])} |
-                       {cnf.Term(conn[n, h2, i - 1]) for n in neighbours[h1]})
-                    for h1 in board.holes
-                    for h2 in board.holes
-                    for i in range(1, len(board.holes)))
-        non_zero_length_constraints |= cnf.Expr(
-            {cnf.Clause({cnf.Term(conn[h1, h2, i - 1], negated=True),
-                         cnf.Term(conn[h1, h2, i])})
-                    for h1 in board.holes
-                    for h2 in board.holes
-                    for i in range(1, len(board.holes))} |
-            {cnf.Clause({cnf.Term(conn[n, h2, i - 1], negated=True),
-                         cnf.Term(conn[h1, h2, i])})
-                    for h1 in board.holes
-                    for h2 in board.holes
-                    for i in range(1, len(board.holes))
-                    for n in neighbours[h1]})
-        if _DEBUG:
-            print("Non-zero length constraints: {}".format(
-                      non_zero_length_constraints.stats))
-
-        # Generate constraints to enforce the definition of `term_hole`.
-        # term_hole[t, h] is true iff there is a position `p` of `c` which
-        # places `t` in # `h` such that comp_pos[c, p] is true.
-        # comp_pos[c, p] is true. The first line handles the forward
-        # implication, and the second the converse.
+        # Produce a dict which maps a terminal `t` and a hole `h` to a list of
+        # positions of t.component which have `t` in `h`. Used a couple of
+        # times in this function.
         positions_which_have_term_in = {
             (t, h): [p for p in positions[c] if p.terminal_positions[t] == h]
                     for c in components
                     for t in c.terminals
                     for h in board.holes}
-        term_hole_constraints = cnf.Expr(
-            cnf.Clause({cnf.Term(term_hole[t, h], negated=True)} |
-                       {cnf.Term(comp_pos[c, p])
-                                  for p in positions_which_have_term_in[t, h]})
-                    for c in components
-                    for t in c.terminals
+
+        # Make internal variables to indicate whether a hole is connected to a
+        # particular terminal. Defined for all holes, and the first terminal in
+        # each net. (This is sufficient for validating (dis)continuity
+        # constraints.
+        term_conn = {(n[0], h): cnf.Var("{} conn {}".format(n[0], h))
+                        for n in nets
+                        for h in board.holes}
+
+        # Generate constraints to enforce the definition of `term_conn`. A hole
+        # is connected to a particular terminal iff one of its neighbours is
+        # connected to the terminal or the terminal is in this hole. The first
+        # expression handles the forward implication, whereas the second
+        # expression handles the converse.
+        neighbours = {h1: [h2 for h2 in board.holes 
+                              if (h1, h2) in board.traces or
+                                 (h2, h1) in board.traces]
+                      for h1 in board.holes}
+        term_conn_constraints = cnf.Expr(
+            cnf.Clause({cnf.Term(term_conn[net[0], h], negated=True)} |
+                       {cnf.Term(term_conn[net[0], n])
+                                                      for n in neighbours[h]} |
+                       {cnf.Term(comp_pos[net[0].component, p])
+                             for p in positions_which_have_term_in[net[0], h]})
+                    for net in nets
                     for h in board.holes)
-        term_hole_constraints |= cnf.Expr(
-            cnf.Clause({cnf.Term(comp_pos[c, p], negated=True),
-                        cnf.Term(term_hole[t, h])})
-                    for c in components
-                    for t in c.terminals
+        term_conn_constraints |= cnf.Expr(
+            {cnf.Clause({cnf.Term(term_conn[net[0], h]),
+                        cnf.Term(term_conn[net[0], n], negated=True)})
+                    for net in nets
                     for h in board.holes
-                    for p in positions_which_have_term_in[t, h])
+                    for n in neighbours[h]} |
+            {cnf.Clause({cnf.Term(term_conn[net[0], h]),
+                         cnf.Term(comp_pos[net[0].component, p],
+                                                                negated=True)})
+                    for net in nets
+                    for h in board.holes
+                    for p in positions_which_have_term_in[net[0], h]})
         if _DEBUG:
-            print("Term hole constraints: {}".format(
-                      term_hole_constraints.stats))
-        
-        # Add constraints which ensure each terminal in a net is connected.
-        # Just check the first node is connected to all the others.
-        # Transitivity and reflexivity of connectedness should guarantee full
-        # connectedness.
+            print("Term conn constraints: {}".format(
+                      zero_length_constraints.stats))
+
+        # Add constraints which ensure any terminals are connected to the
+        # terminal that's at the head of its net.
+        def term_to_net(t):
+            l = [net for net in nets if t in net]
+            assert len(l) == 1, "Terminal is not in exactly one net"
+            return l[0]
+        head_term = {t: term_to_net(t)[0]
+                            for c in components
+                            for t in c.terminals}
         net_continuity_constraints = cnf.Expr(
-            cnf.Clause({cnf.Term(term_hole[n[0], h1], negated=True),
-                        cnf.Term(term_hole[t2, h2], negated=True),
-                        cnf.Term(conn[h1, h2])}) 
-                    for n in nets
-                    for t2 in n[1:]
-                    for h1 in board.holes
-                    for h2 in board.holes)
+            cnf.Clause({cnf.Term(comp_pos[c, p], negated=True)
+                        for p in positions_which_have_term_in[t, h]} |
+                       {cnf.Term(term_conn[head_term[t], h])})
+                for h in board.holes
+                for c in components
+                for t in c.terminals)
         if _DEBUG:
             print("Net continuity constraints: {}".format(
                       net_continuity_constraints.stats))
-
-        # Add constraints which ensure that terminals in different nets are
-        # disconnected. Check all pairs of nets are disconnected, using only
-        # the first element.
-        net_discontinuity_constraints = cnf.Expr(
-            cnf.Clause({cnf.Term(term_hole[n1[0], h1], negated=True),
-                        cnf.Term(term_hole[n2[0], h2], negated=True),
-                        cnf.Term(conn[h1, h2], negated=True)}) 
-                    for idx, n1 in enumerate(nets)
-                    for n2 in nets[(idx + 1):]
-                    for h1 in board.holes
-                    for h2 in board.holes)
+                
+        # Add constraints which ensure that no hole is part of more than one
+        # net.
+        net_discontinuity_constraints = cnf.Expr.all(
+                          cnf.at_most_one(term_conn[net[0], h] for net in nets)
+                for h in board.holes)
         if _DEBUG:
             print("Net discontinuity constraints: {}".format(
                       net_discontinuity_constraints.stats))
 
         # Return all of the above.
-        return (zero_length_constraints |
-                non_zero_length_constraints |
-                term_hole_constraints |
+        return (term_conn_constraints |
                 net_continuity_constraints |
                 net_discontinuity_constraints)
                         
