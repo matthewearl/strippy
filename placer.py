@@ -152,6 +152,13 @@ def place(board, components, nets):
                     for t in c.terminals
                     for h in board.holes}
 
+        # Produce an adjacency dict for the electrical continuity graph implied
+        # by board.holes and board.traces.
+        neighbours = {h1: [h2 for h2 in board.holes 
+                              if (h1, h2) in board.traces or
+                                 (h2, h1) in board.traces]
+                      for h1 in board.holes}
+
         # Make internal variables to indicate whether a hole is connected to a
         # particular terminal. Defined for all holes, and the first terminal in
         # each net. (This is sufficient for validating (dis)continuity
@@ -160,15 +167,24 @@ def place(board, components, nets):
                         for n in nets
                         for h in board.holes}
 
+        # Also make internal variables to indicate the minimum distance of each
+        # hole to the nearest terminal. term_dist[h, i] is true iff there is no
+        # path of length `i` or less from hole `h` to a head terminal. (A head
+        # terminal is a terminal that is at the start of its net.)
+        #
+        # In other words, term_dist[h, *] is a unary encoding of the distance
+        # to the nearest head terminal. Holes which are not connected to a
+        # terminal will take the maximum value len(board.holes). Conversely,
+        # holes which are connected will take a value < len(board.holes).
+        term_dist = {(h, i): cnf.Var("{} dist {}".format(h, i))
+                        for h in board.holes
+                        for i in range(len(board.holes))}
+
         # Generate constraints to enforce the definition of `term_conn`. A hole
         # is connected to a particular terminal iff one of its neighbours is
         # connected to the terminal or the terminal is in this hole. The first
         # expression handles the forward implication, whereas the second
         # expression handles the converse.
-        neighbours = {h1: [h2 for h2 in board.holes 
-                              if (h1, h2) in board.traces or
-                                 (h2, h1) in board.traces]
-                      for h1 in board.holes}
         term_conn_constraints = cnf.Expr(
             cnf.Clause({cnf.Term(term_conn[net[0], h], negated=True)} |
                        {cnf.Term(term_conn[net[0], n])
@@ -193,47 +209,64 @@ def place(board, components, nets):
             print("Term conn constraints: {}".format(
                       term_conn_constraints.stats))
 
-        # Add constraints which ensure any terminals are connected to the
-        # terminal that's at the head of its net.
-        def term_to_net(t):
-            l = [net for net in nets if t in net]
-            assert len(l) == 1, "Terminal is not in exactly one net"
-            return l[0]
-        head_term = {t: term_to_net(t)[0]
-                            for c in components
-                            for t in c.terminals}
-        net_continuity_constraints = cnf.Expr(
-            cnf.Clause({cnf.Term(comp_pos[c, p], negated=True),
-                        cnf.Term(term_conn[head_term[t], h])})
-                for h in board.holes
-                for c in components
-                for t in c.terminals
-                for p in positions_which_have_term_in[t, h])
-        if _DEBUG:
-            print("Net continuity constraints: {}".format(
-                      net_continuity_constraints.stats))
-                
+        # Add constraints to enforce the definition of `term_dist[h, 0]`, for
+        # all holes `h`. term_hist[h, 0] is false iff a component is positioned
+        # such that a head terminal is in hole `h`. The first statement
+        # expresses the forward implication, and the second statement expresses
+        # the converse.
+        zero_term_dist_constraints = cnf.Expr(
+            cnf.Clause({cnf.Term(term_dist[h, 0])} |
+                        {cnf.Term(comp_pos[net[0].component, p])
+                             for net in nets
+                             for p in positions_which_have_term_in[net[0], h]})
+                    for h in board.holes)
+        zero_term_dist_constraints |= cnf.Expr(
+            cnf.Clause({cnf.Term(comp_pos[net[0].component, p], negated=True),
+                        cnf.Term(term_dist[h, 0], negated=True)})
+                    for h in board.holes
+                    for net in nets
+                    for p in positions_which_have_term_in[net[0], h])
+
+        # Add constraints to enforce the definition of `term_dist[h, i]`, for
+        # 0 < 1 < |holes|. term_dist[h, i] is true iff all for each neighbour
+        # `n` term_dist[n, i - 1] is true. The first statement expresses the
+        # forward implication, and the second statement expresses the converse.
+        non_zero_term_dist_constraints = cnf.Expr(
+            cnf.Clause({cnf.Term(term_dist[h, i], negated=True),
+                        cnf.Term(term_dist[n, i - 1]})
+                    for h in board.holes
+                    for i in range(1, len(board.holes))
+                    for n in neighbours[h]))
+        non_zero_term_dist_constraints |= cnf.Expr(
+            cnf.Clause(cnf.Term(term_dist[n, i - 1], negated=True)
+                                                        for n in neighbours[h])
+                    for h in board.holes
+                    for i in range(1, len(board.holes)))
+
         # Add constraints which ensure that no hole is part of more than one
+        # net, and if its disconnected from all nets, then it can be part of no
         # net.
-        net_discontinuity_constraints = cnf.Expr.all(
-                          cnf.at_most_one(term_conn[net[0], h] for net in nets)
-                for h in board.holes)
+        net_continuity_constraints = cnf.Expr.all(
+                          cnf.at_most_one(
+                              {term_conn[net[0], h] for net in nets} |
+                              {term_dist[h, len(board.holes) - 1]})
+                    for h in board.holes)
         if _DEBUG:
-            print("Net discontinuity constraints: {}".format(
-                      net_discontinuity_constraints.stats))
+            print("Net constraints constraints: {}".format(
+                      net_continuity_constraints.stats))
 
         # Return all of the above.
         return (term_conn_constraints |
-                net_continuity_constraints |
-                net_discontinuity_constraints)
-                        
+                zero_term_dist_constraints |
+                non_zero_term_dist_constraints |
+                net_continuity_constraints)
+
     # Make variables to indicate whether a component is in a particular
     # position. Assignments for these variables will be used to produce
     # placements.
     comp_pos = {(comp, pos): cnf.Var("comp {} in pos {}".format(comp, pos))
                     for comp in components
                     for pos in positions[comp]}
-
 
     # Constrain the `comp_pos` variables such that a component must be in
     # exactly one position.
@@ -260,5 +293,5 @@ def place(board, components, nets):
         # violated.
         assert len(mapping) == len(components)
         yield Placement(board, mapping)
-        
+
 
