@@ -36,6 +36,7 @@ __all__ = (
     'Expr',
     'solve',
     'solve_one',
+    'tseitin_and',
     'Term',
     'Var',
 )
@@ -248,6 +249,21 @@ def iff(pvar1, pvar2):
 
     """
     return implies(pvar1, pvar2) | implies(pvar2, pvar1)
+
+def tseitin_and(pvars):
+    """
+    Make a new var equivalent to the logical AND of a set of vars.
+
+    Also return the CNF expression which enforces this relationship.
+
+    """
+    out_var = Var()
+    expr = Expr({Clause({Term(pvar, negated=True) for pvar in pvars} |
+                        {Term(out_var)})} |
+                {Clause({Term(pvar), Term(out_var, negated=True)})
+                                                  for pvar in pvars})
+
+    return out_var, expr
 
 def solve(cnf):
     """
