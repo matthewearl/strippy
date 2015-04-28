@@ -233,13 +233,14 @@ def place(board, components, nets):
         # forward implication, and the second statement expresses the converse.
         non_zero_term_dist_constraints = cnf.Expr(
             cnf.Clause({cnf.Term(term_dist[h, i], negated=True),
-                        cnf.Term(term_dist[n, i - 1]})
+                        cnf.Term(term_dist[n, i - 1])})
                     for h in board.holes
                     for i in range(1, len(board.holes))
-                    for n in neighbours[h]))
+                    for n in [h] + neighbours[h])
         non_zero_term_dist_constraints |= cnf.Expr(
-            cnf.Clause(cnf.Term(term_dist[n, i - 1], negated=True)
-                                                        for n in neighbours[h])
+            cnf.Clause({cnf.Term(term_dist[n, i - 1], negated=True)
+                                                for n in [h] + neighbours[h]} |
+                       {cnf.Term(term_dist[h, i])})
                     for h in board.holes
                     for i in range(1, len(board.holes)))
 
