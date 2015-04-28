@@ -226,6 +226,9 @@ def place(board, components, nets):
                     for h in board.holes
                     for net in nets
                     for p in positions_which_have_term_in[net[0], h])
+        if _DEBUG:
+            print("Zero term dist constraints: {}".format(
+                      zero_term_dist_constraints.stats))
 
         # Add constraints to enforce the definition of `term_dist[h, i]`, for
         # 0 < 1 < |holes|. term_dist[h, i] is true iff all for each neighbour
@@ -243,23 +246,47 @@ def place(board, components, nets):
                        {cnf.Term(term_dist[h, i])})
                     for h in board.holes
                     for i in range(1, len(board.holes)))
+        if _DEBUG:
+            print("Non-zero term dist contraints: {}".format(
+                      non_zero_term_dist_constraints.stats))
+
+        # Add constraints which ensure any terminals are connected to the
+        # terminal that's at the head of its net.
+        def term_to_net(t):
+            l = [net for net in nets if t in net]
+            assert len(l) == 1, "Terminal is not in exactly one net"
+            return l[0]
+        head_term = {t: term_to_net(t)[0]
+                            for c in components
+                            for t in c.terminals}
+        net_continuity_constraints = cnf.Expr(
+            cnf.Clause({cnf.Term(comp_pos[c, p], negated=True),
+                        cnf.Term(term_conn[head_term[t], h])})
+                for h in board.holes
+                for c in components
+                for t in c.terminals
+                for p in positions_which_have_term_in[t, h])
+        if _DEBUG:
+            print("Net continuity constraints: {}".format(
+                      net_continuity_constraints.stats))
 
         # Add constraints which ensure that no hole is part of more than one
         # net, and if its disconnected from all nets, then it can be part of no
         # net.
-        net_continuity_constraints = cnf.Expr.all(
+        net_discontinuity_constraints = cnf.Expr.all(
                           cnf.at_most_one(
                               {term_conn[net[0], h] for net in nets} |
                               {term_dist[h, len(board.holes) - 1]})
                     for h in board.holes)
         if _DEBUG:
-            print("Net constraints constraints: {}".format(
-                      net_continuity_constraints.stats))
+            print("Net discontinuity constraints: {}".format(
+                      net_discontinuity_constraints.stats))
 
         # Return all of the above.
         return (term_conn_constraints |
                 zero_term_dist_constraints |
                 non_zero_term_dist_constraints |
+                net_discontinuity_constraints |
                 net_continuity_constraints)
 
     # Make variables to indicate whether a component is in a particular
