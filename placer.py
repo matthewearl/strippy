@@ -33,7 +33,7 @@ import collections.abc
 
 import cnf
 
-_DEBUG = False
+_DEBUG = True
 
 class Placement(collections.abc.Mapping):
     """
@@ -191,7 +191,7 @@ def place(board, components, nets):
                     for p in positions_which_have_term_in[net[0], h]})
         if _DEBUG:
             print("Term conn constraints: {}".format(
-                      zero_length_constraints.stats))
+                      term_conn_constraints.stats))
 
         # Add constraints which ensure any terminals are connected to the
         # terminal that's at the head of its net.
@@ -203,12 +203,12 @@ def place(board, components, nets):
                             for c in components
                             for t in c.terminals}
         net_continuity_constraints = cnf.Expr(
-            cnf.Clause({cnf.Term(comp_pos[c, p], negated=True)
-                        for p in positions_which_have_term_in[t, h]} |
-                       {cnf.Term(term_conn[head_term[t], h])})
+            cnf.Clause({cnf.Term(comp_pos[c, p], negated=True),
+                        cnf.Term(term_conn[head_term[t], h])})
                 for h in board.holes
                 for c in components
-                for t in c.terminals)
+                for t in c.terminals
+                for p in positions_which_have_term_in[t, h])
         if _DEBUG:
             print("Net continuity constraints: {}".format(
                       net_continuity_constraints.stats))
