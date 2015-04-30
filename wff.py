@@ -27,6 +27,7 @@ converting them to CNF expressions in an efficient manner.
 """
 
 __all__ = (
+    'to_cnf',
     'Var',
 )
 
@@ -71,6 +72,14 @@ class _Formula(metaclass=abc.ABCMeta):
         if not isinstance(other, _Formula):
             raise NotImplemented
         return _Op(_OpType.IFF, [self, other])
+
+    @abc.abstractmethod
+    def _is_op(self):
+        """
+        Is this formula an operation?
+
+        """
+        raise NotImplemented
 
     @abc.abstractmethod
     def _eliminate_iff(self):
@@ -160,6 +169,10 @@ class _Op(_Formula):
             return "({!r} {} {!r})".format(self._args[0],
                                            op_to_str[self._op_type],
                                            self._args[1])
+
+    def _is_op(self):
+        return True
+
     def _eliminate_iff(self):
         new_args = [arg._eliminate_iff() for arg in self._args]
         if self._op_type == _OpType.IFF:
@@ -170,35 +183,38 @@ class _Op(_Formula):
 
     def _eliminate_implies(self):
         new_args = [arg._eliminate_implies() for arg in self._args]
-        if self._op_type == _OpType.IFF:
+        if self._op_type == _OpType.IMPLIES:
             out = (~new_args[0] | new_args[1])
         else:
             out = _Op(self._op_type, new_args)
         return out
 
     def _move_nots(self):
-        if self._op_type == _OpType.NOT:
+        if self._op_type == _OpType.NOT and self._args[0]._is_op():
+            # Not of an operation. Either move the NOT in through De Morgan's
+            # Law (in the case of an OR or an AND), or in the case of a NOT of
+            # a NOT eliminate both NOTs. Recursively apply to the result.
             arg = self._args[0]
             if arg._op_type == _OpType.NOT:
-                # Not of a not: Eliminate both.
                 out = arg._args[0]
             elif arg._op_type == _OpType.AND:
-                # Not of an AND: Turn into an OR of NOTs.
                 out = ~arg._args[0] | ~arg._args[1]
             elif arg._op_type == _OpType.OR:
-                # Not of an OR: Turn into an AND of NOTs.
                 out = ~arg._args[0] & ~arg._args[1]
             else:
                 assert False, ("Op of type {} should have been "
                                "eliminated".format(self._op_type))
             out = out._move_nots()
+        elif self._op_type == _OpType.NOT and not self._args[0]._is_op():
+            # NOT of a var. Nothing to do.
+            out = self
         else:
+            # Some other operation. Apply the operation to the children.
             new_args = [arg._move_nots() for arg in self._args]
             out = _Op(self._op_type, new_args)
         return out
 
     def _distribute_ors(self):
-
         # Precondition: The formula contains only AND, OR and NOT operators,
         #               and vars. The NOT operations only appear applied to
         #               vars.
@@ -207,7 +223,7 @@ class _Op(_Formula):
         new_args = [arg._distribute_ors() for arg in self._args]
 
         if (self._op_type == _OpType.OR and
-            new_args[1]._op_type == _OpType.AND):
+            new_args[1]._is_op() and new_args[1]._op_type == _OpType.AND):
             # We have an expression of the form P | (Q & R), so distribute to
             # (P | Q) & (P | R).
             out = ((new_args[0] | new_args[1]._args[0]) &
@@ -219,7 +235,7 @@ class _Op(_Formula):
             out = (out._args[0]._distribute_ors() &
                    out._args[1]._distribute_ors())
         elif (self._op_type == _OpType.OR and
-              new_args[0]._op_type == _OpType.AND):
+              new_args[0]._is_op() and new_args[0]._op_type == _OpType.AND):
             # We have an expression of the form (P & Q) | R, so distribute to
             # (P | R) & (Q | R)
             out = ((new_args[0]._args[0] | new_args[0]) &
@@ -240,21 +256,23 @@ class Var(cnf.Var, _Formula):
     def __init__(self, name=None):
         super().__init__(name=name)
 
+    def _is_op(self):
+        return False
+
     def __repr__(self):
         return "Var({!r})".format(self.name)
 
     def _eliminate_iff(self):
-        pass
+        return self
 
     def _eliminate_implies(self):
-        pass
+        return self
 
     def _move_nots(self):
-        pass
+        return self
 
     def _distribute_ors(self):
-        pass
-
+        return self
 
 def to_cnf(formula):
     """
