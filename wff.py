@@ -30,15 +30,18 @@ __all__ = (
     'Var',
 )
 
+import abc
 import enum
 
 import cnf
 
-class _Formula():
+class _Formula(metaclass=abc.ABCMeta):
     """
     Base class for formula types.
 
-    Overloads operators so that formulae can be composed.
+    Provides common methods. Suitable for use as a mixin.
+
+    _Formulas are immutable, and sub-classes should respect this.
 
     """
     def __invert__(self):
@@ -69,6 +72,50 @@ class _Formula():
             raise NotImplemented
         return _Op(_OpType.IFF, [self, other])
 
+    @abc.abstractmethod
+    def _eliminate_iff(self):
+        """
+        Convert iff operations into two implies operations, ANDED
+
+        """
+        raise NotImplemented
+
+    @abc.abstractmethod
+    def _eliminate_implies(self):
+        """
+        Convert implies operations (a >> b) into (~a | b).
+
+        """
+        raise NotImplemented
+
+    @abc.abstractmethod
+    def _move_nots(self):
+        """
+        Push nots inwards using De Morgan's Law.
+
+        """
+        raise NotImplemented
+
+    @abc.abstractmethod
+    def _distribute_ors(self):
+        """
+        Distribute and over ors.
+
+        """
+        raise NotImplemented
+
+    def _to_cnf(self):
+        """
+        Implementation of `to_cnf()`.
+
+        """
+        formula = self._eliminate_iff()
+        formula = formula._eliminate_implies()
+        formula = formula._move_nots()
+        formula = formula._distribute_ors()
+
+        return formula
+
 class _OpType(enum.Enum):
     NOT     = 1
     AND     = 2
@@ -92,7 +139,7 @@ class _Op(_Formula):
                 _OpType.IMPLIES: 2,
                 _OpType.IFF: 2,
                }
-    
+
     def __init__(self, op_type, args):
         self._op_type = op_type
         self._args = args
@@ -113,11 +160,105 @@ class _Op(_Formula):
             return "({!r} {} {!r})".format(self._args[0],
                                            op_to_str[self._op_type],
                                            self._args[1])
+    def _eliminate_iff(self):
+        new_args = [arg._eliminate_iff() for arg in self._args]
+        if self._op_type == _OpType.IFF:
+            out = (new_args[0] >> new_args[1]) & (new_args[0] << new_args[1])
+        else:
+            out = _Op(self._op_type, new_args)
+        return out
 
-class Var(_Formula, cnf.Var):
+    def _eliminate_implies(self):
+        new_args = [arg._eliminate_implies() for arg in self._args]
+        if self._op_type == _OpType.IFF:
+            out = (~new_args[0] | new_args[1])
+        else:
+            out = _Op(self._op_type, new_args)
+        return out
+
+    def _move_nots(self):
+        if self._op_type == _OpType.NOT:
+            arg = self._args[0]
+            if arg._op_type == _OpType.NOT:
+                # Not of a not: Eliminate both.
+                out = arg._args[0]
+            elif arg._op_type == _OpType.AND:
+                # Not of an AND: Turn into an OR of NOTs.
+                out = ~arg._args[0] | ~arg._args[1]
+            elif arg._op_type == _OpType.OR:
+                # Not of an OR: Turn into an AND of NOTs.
+                out = ~arg._args[0] & ~arg._args[1]
+            else:
+                assert False, ("Op of type {} should have been "
+                               "eliminated".format(self._op_type))
+            out = out._move_nots()
+        else:
+            new_args = [arg._move_nots() for arg in self._args]
+            out = _Op(self._op_type, new_args)
+        return out
+
+    def _distribute_ors(self):
+
+        # Precondition: The formula contains only AND, OR and NOT operators,
+        #               and vars. The NOT operations only appear applied to
+        #               vars.
+        # Postcondition: The formula is in CNF.
+
+        new_args = [arg._distribute_ors() for arg in self._args]
+
+        if (self._op_type == _OpType.OR and
+            new_args[1]._op_type == _OpType.AND):
+            # We have an expression of the form P | (Q & R), so distribute to
+            # (P | Q) & (P | R).
+            out = ((new_args[0] | new_args[1]._args[0]) &
+                   (new_args[0] | new_args[1]._args[1]))
+
+            # The RHS or LHS of `out` ((P | Q) or (P | R)) may still contain
+            # ANDs, so run _distribute_ors() on them to bring ANDs up to the
+            # top. After this `out` will be in CNF.
+            out = (out._args[0]._distribute_ors() &
+                   out._args[1]._distribute_ors())
+        elif (self._op_type == _OpType.OR and
+              new_args[0]._op_type == _OpType.AND):
+            # We have an expression of the form (P & Q) | R, so distribute to
+            # (P | R) & (Q | R)
+            out = ((new_args[0]._args[0] | new_args[0]) &
+                   (new_args[0]._args[1] | new_args[1]))
+
+            # Distribute the ORs on the children, as in the previous case.
+            out = (out._args[0]._distribute_ors() &
+                   out._args[1]._distribute_ors())
+        else:
+            # We either have a pure tree of ORs, a tree with ANDs at the top, 
+            # or just a single term. All of these satisfy the post-condition
+            # for this function.
+            out = _Op(self._op_type, new_args)
+
+        return out
+
+class Var(cnf.Var, _Formula):
     def __init__(self, name=None):
         super().__init__(name=name)
 
     def __repr__(self):
         return "Var({!r})".format(self.name)
 
+    def _eliminate_iff(self):
+        pass
+
+    def _eliminate_implies(self):
+        pass
+
+    def _move_nots(self):
+        pass
+
+    def _distribute_ors(self):
+        pass
+
+
+def to_cnf(formula):
+    """
+    Convert the formula to CNF (conjunctive normal form).
+
+    """
+    return formula._to_cnf()
