@@ -27,6 +27,7 @@ converting them to CNF expressions in an efficient manner.
 """
 
 __all__ = (
+    'Var',
 )
 
 import enum
@@ -40,7 +41,6 @@ class _Formula():
     Overloads operators so that formulae can be composed.
 
     """
-
     def __invert__(self):
         return _Op(_OpType.NOT, [self])
 
@@ -54,12 +54,12 @@ class _Formula():
             raise NotImplemented
         return _Op(_OpType.OR, [self, other])
 
-    def __rrshift__(self, other):
+    def __rshift__(self, other):
         if not isinstance(other, _Formula):
             raise NotImplemented
         return _Op(_OpType.IMPLIES, [self, other])
 
-    def __rlshift__(self, other):
+    def __lshift__(self, other):
         if not isinstance(other, _Formula):
             raise NotImplemented
         return _Op(_OpType.IMPLIES, [other, self])
@@ -97,27 +97,27 @@ class _Op(_Formula):
         self._op_type = op_type
         self._args = args
 
-        if len(args) != OP_ARITY[op_type]:
+        if len(args) != self.OP_ARITY[op_type]:
             raise ValueError
 
     def __repr__(self):
-        op_to_str = {_OpType.AND: "and",
-                     _OpType.OR: "or",
+        op_to_str = {_OpType.AND: "&",
+                     _OpType.OR: "|",
                      _OpType.IMPLIES: ">>"}
 
         if self._op_type == _OpType.NOT:
-            return "~{!r}".format(self.args[0])
+            return "~{!r}".format(self._args[0])
         elif self._op_type == _OpType.IFF:
-            return "({!r}).iff({!r})".format(*self.args)
+            return "({!r}).iff({!r})".format(*self._args)
         else:
-            return "({!r} {} {!r})".format(args[0],
+            return "({!r} {} {!r})".format(self._args[0],
                                            op_to_str[self._op_type],
-                                           args[1])
+                                           self._args[1])
 
-class Var(cnf.Var, _Expr):
+class Var(_Formula, cnf.Var):
     def __init__(self, name=None):
         super().__init__(name=name)
 
     def __repr__(self):
-        return "Var({!r})".format(name)
+        return "Var({!r})".format(self.name)
 
