@@ -43,6 +43,8 @@ _OCCUPY_SIZE = 40
 _OCCUPY_OPACITY = 0.5
 _PLACEMENT_SEP = 30
 _BORDER_COLOR = "black"
+_CROSS_SIZE = 40
+_CROSS_COLOR = "red"
 
 def _grid_coords_to_pixel(coords, center=False):
     x, y = coords
@@ -58,6 +60,24 @@ def _draw_hole(h, file=sys.stdout):
           'stroke-width="{}" fill="transparent" />'.format(
                 center[0], center[1], _HOLE_RADIUS, _HOLE_COLOR, _LINE_WIDTH),
           file=file)
+
+def _draw_drilled_hole(h, file=sys.stdout):
+    center = _grid_coords_to_pixel(h, center=True)
+
+    r = _CROSS_SIZE / 2.
+
+    cross_coords = (((center[0] - r), (center[1] - r),
+                     (center[0] + r), (center[1] + r)),
+                    ((center[0] + r), (center[1] - r),
+                     (center[0] - r), (center[1] + r)))
+
+    for i in range(2):
+        print('<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="{}" '
+              'stroke-width="{}" />'.format(
+                cross_coords[i][0][0], cross_coords[i][0][1],
+                cross_coords[i][1][0], cross_coords[i][1][1],
+                _CROSS_COLOR, _LINE_WIDTH),
+              file=file)
 
 def _draw_trace(t, file=sys.stdout):
     points = tuple(_grid_coords_to_pixel(t[i], center=True) for i in range(2))
@@ -164,6 +184,9 @@ def print_svg(placements, file=sys.stdout):
 
         for trace in placement.board.traces:
             _draw_trace(trace, file=file)
+
+        for hole in placement.drilled_holes:
+            _draw_drilled_hole(hole, file=file)
 
         for comp, pos in placement.items():
             _draw_component_terminals(comp, pos, file=file)

@@ -43,9 +43,10 @@ class Placement(collections.abc.Mapping):
 
     """
 
-    def __init__(self, board, mapping):
+    def __init__(self, board, mapping, drilled_holes):
         self.board = board
         self._mapping = mapping
+        self._drilled_holes = drilled_holes
 
     def __getitem__(self, key):
         return self._mapping[key]
@@ -65,8 +66,29 @@ class Placement(collections.abc.Mapping):
                 ", ".join("{}:{}".format(terminal.label,
                                          pos.terminal_positions[terminal])
                                          for terminal in comp.terminals)))
+        print("Drilled: {}".format(self._drilled_holes))
 
-def place(board, components, nets):
+class _Link():
+    """
+    A link is a conductive element between two holes.
+
+    It is represented by the unordered set of the two holes that it goes
+    between.
+
+    """
+
+    def __init__(self, h1, h2):
+        if h2 < h1:
+            h1, h2 = h2, h1
+        self.h1, self.h2 = h1, h2
+        
+    def __eq__(self, other):
+        return (self.h1, self.h2) == (other.h1, other.h2)
+
+    def __hash__(self):
+        return hash((self.h1, self.h2))
+
+def place(board, components, nets, allow_drilled=False):
     """
     Place components on a board, according to a net list.
 
@@ -75,6 +97,8 @@ def place(board, components, nets):
         subclass of `component.Component`.
     nets: Iterable of nets. Each net is a set of terminals that are to be
         condutively connected.
+    allow_drilled: If set, solutions may contain drilled out holes. Traces that
+        are connected to drilled out holes are considered to not conduct.
 
     Yields:
         Placements which satify the input constraints.
@@ -154,10 +178,8 @@ def place(board, components, nets):
 
         # Produce an adjacency dict for the electrical continuity graph implied
         # by board.holes and board.traces.
-        neighbours = {h1: [h2 for h2 in board.holes 
-                              if (h1, h2) in board.traces or
-                                 (h2, h1) in board.traces]
-                      for h1 in board.holes}
+        neighbours = {h1: [h2 for h2 in board.holes if _Link(h1, h2) in links]
+                                                         for h1 in board.holes}
 
         # Make internal variables to indicate whether a hole is connected to a
         # particular terminal. Defined for all holes, and the first terminal in
@@ -180,6 +202,22 @@ def place(board, components, nets):
                         for h in board.holes
                         for i in range(len(board.holes))}
 
+        # Internal variables are needed for the expression link_pres[h, n] ^
+        # term_conn[t, n] for all head terminals t, all holes h, and all
+        # neighbours n of each hole. 
+        neighbour_and_term_conn = {(net[0], h, n):
+               tseitin_and(link_pres[_Link(h, n)], term_conn[t, n])
+                    for net in nets
+                    for h in board.holes
+                    for n in neighbours[h]}
+
+        # Pull out the cnf exprs from the above, and just leave the vars as
+        # values.
+        neighbour_and_term_conn_constraints = cnf.Expr.all(
+                        expr for var, expr in neighbour_and_term_conn.values())
+        neighbour_and_term_conn = {k: var for k, (var, expr) in
+                                               neighbour_and_term_conn.items()}
+
         # Generate constraints to enforce the definition of `term_conn`. A hole
         # is connected to a particular terminal iff one of its neighbours is
         # connected to the terminal or the terminal is in this hole. The first
@@ -187,7 +225,7 @@ def place(board, components, nets):
         # expression handles the converse.
         term_conn_constraints = cnf.Expr(
             cnf.Clause({cnf.Term(term_conn[net[0], h], negated=True)} |
-                       {cnf.Term(term_conn[net[0], n])
+                       {cnf.Term(neighbour_and_term_conn[net[0], h, n], n])
                                                       for n in neighbours[h]} |
                        {cnf.Term(comp_pos[net[0].component, p])
                              for p in positions_which_have_term_in[net[0], h]})
@@ -195,7 +233,8 @@ def place(board, components, nets):
                     for h in board.holes)
         term_conn_constraints |= cnf.Expr(
             {cnf.Clause({cnf.Term(term_conn[net[0], h]),
-                        cnf.Term(term_conn[net[0], n], negated=True)})
+                        cnf.Term(neighbour_and_term_conn[net[0], h, n],
+                                                                negated=True)})
                     for net in nets
                     for h in board.holes
                     for n in neighbours[h]} |
@@ -235,11 +274,14 @@ def place(board, components, nets):
         # `n` term_dist[n, i - 1] is true. The first statement expresses the
         # forward implication, and the second statement expresses the converse.
         non_zero_term_dist_constraints = cnf.Expr(
-            cnf.Clause({cnf.Term(term_dist[h, i], negated=True),
-                        cnf.Term(term_dist[n, i - 1])})
-                    for h in board.holes
-                    for i in range(1, len(board.holes))
-                    for n in [h] + neighbours[h])
+            {cnf.Clause({cnf.Term(term_dist[h, i], negated=True),
+                        cnf.Term(term_dist[h, i - 1])})}
+            {cnf.Clause({cnf.Term(term_dist[h, i], negated=True),
+                         cnf.Term(link_pres[_Link(h, n)], negated=True),
+                         cnf.Term(term_dist[n, i - 1])})
+                                            for n in neighbours[h]}
+                for h in board.holes
+                for i in range(1, len(board.holes)))
         non_zero_term_dist_constraints |= cnf.Expr(
             cnf.Clause({cnf.Term(term_dist[n, i - 1], negated=True)
                                                 for n in [h] + neighbours[h]} |
@@ -284,6 +326,7 @@ def place(board, components, nets):
 
         # Return all of the above.
         return (term_conn_constraints |
+                neighbour_and_term_conn_constraints |
                 zero_term_dist_constraints |
                 non_zero_term_dist_constraints |
                 net_discontinuity_constraints |
@@ -302,8 +345,37 @@ def place(board, components, nets):
                                                for pos in positions[comp])
                                     for comp in components)
 
+    # Make variables to indicate holes which have been drilled out.
+    drilled = {h: cnf.Var("{} drilled".format(h)) for h in board.holes}
+
+    # Create `links`, using `board.traces`. This is used when building the
+    # continuity constraints rather than using `board.traces` directly. In
+    # future, `links` will be extended to include other possible conductive
+    # elements (eg. jumper wires).
+    links = [_Link(l) for l in board.traces]
+    
+    # Make internal variables which indicate which links are present in the
+    # solution.
+    link_pres = {l: cnf.Var("{} present".format(l)) for l in links}
+
+    # Enforce the relationship between `drilled` and `link_pres`.
+    hole_to_links = {h: {_Link(tr) for tr in board.traces if h in tr} for h in
+                     board.holes}
+    drilled_link_constraints = cnf.Expr(
+        cnf.Clause({cnf.Term(drilled[h], negated=True),
+                    cnf.Term(link_pres[l], negated=True)})
+                for h in board.holes
+                for l in hole_to_links[h])
+    drilled_link_constraints |= cnf.Expr(
+        cnf.Clause({cnf.Term(link_pres[l]) for l in hole_to_links[h]} |
+                   {cnf.Term(drilled[h])})
+                for h in board.holes)
+
     # Combine all the constraints into a single expression.
-    expr = one_pos_per_comp | physical_constraints() | continuity_constraints()
+    expr = (one_pos_per_comp | 
+            drilled_link_constraints |
+            physical_constraints() |
+            continuity_constraints())
 
     if _DEBUG:
         print(expr.stats)
@@ -317,9 +389,11 @@ def place(board, components, nets):
                 print("{} {}".format("~" if not val else " ", var))
         mapping = {comp: pos
                      for (comp, pos), var in comp_pos.items() if sol[var]}
+        drilled_holes = {h for h in holes if sol[drilled_holes[h]]}
+
         # If this fails the "exactly one position" constraint has been
         # violated.
         assert len(mapping) == len(components)
-        yield Placement(board, mapping)
+        yield Placement(board, mapping, drilled_holes)
 
 
