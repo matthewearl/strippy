@@ -238,7 +238,7 @@ class _Op(_Formula):
               new_args[0]._is_op() and new_args[0]._op_type == _OpType.AND):
             # We have an expression of the form (P & Q) | R, so distribute to
             # (P | R) & (Q | R)
-            out = ((new_args[0]._args[0] | new_args[0]) &
+            out = ((new_args[0]._args[0] | new_args[1]) &
                    (new_args[0]._args[1] | new_args[1]))
 
             # Distribute the ORs on the children, as in the previous case.
