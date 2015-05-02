@@ -27,8 +27,8 @@ converting them to CNF expressions in an efficient manner.
 """
 
 __all__ = (
-    'all',
-    'any',
+    'for_all',
+    'exists',
     'to_cnf',
     'Var',
 )
@@ -117,6 +117,14 @@ class _Formula(metaclass=abc.ABCMeta):
         """
         raise NotImplemented
 
+    @abc.abstractmethod
+    def _extract_clauses(self):
+        """
+        Get cnf.Clause objects from a formula in CNF.
+
+        """
+        raise NotImplemented
+
     def _to_cnf(self):
         """
         Implementation of `to_cnf()`.
@@ -127,7 +135,7 @@ class _Formula(metaclass=abc.ABCMeta):
         formula = formula._move_nots()
         formula = formula._distribute_ors()
 
-        return formula
+        return cnf.Expr(formula._extract_clauses())
 
 class _OpType(enum.Enum):
     NOT     = 1
@@ -256,6 +264,29 @@ class _Op(_Formula):
 
         return out
 
+    def _extract_clauses(self):
+        child_clauses = tuple(a._extract_clauses() for a in self._args)
+
+        if self._op_type == _OpType.OR:
+            assert all(len(a) == 1 for a in child_clauses), \
+                    "AND found under OR in CNF formula"
+            out = {next(iter(child_clauses[0])) | 
+                   next(iter(child_clauses[1]))}
+        elif self._op_type == _OpType.AND:
+            out = child_clauses[0] | child_clauses[1]
+        elif self._op_type == _OpType.NOT:
+            assert len(child_clauses[0]) == 1, \
+                    "AND found under NOT in CNF formula"
+            clause = next(iter(child_clauses[0]))
+            assert len(clause == 1), \
+                    "OR found under NOT in CNF formula"
+            term = next(iter(clause))
+            assert not term.negated, "NOT found under NOT in CNF formula"
+
+            out = {cnf.Clause((cnf.Term(term.var, negated=True),))}
+
+        return out
+
 class Var(cnf.Var, _Formula):
     def __init__(self, name=None):
         super().__init__(name=name)
@@ -278,6 +309,12 @@ class Var(cnf.Var, _Formula):
     def _distribute_ors(self):
         return self
 
+    def _extract_clauses(self):
+        assert False, "TODO"
+
+    def _extract_clauses(self):
+        return {cnf.Clause({cnf.Term(self)})}
+            
 def to_cnf(formula):
     """
     Convert the formula to CNF (conjunctive normal form).
@@ -285,14 +322,14 @@ def to_cnf(formula):
     """
     return formula._to_cnf()
 
-def any(formulae):
+def exists(formulae):
     """
     Return a formula which is true if any of the given formulas are true.
 
     """
     return functools.reduce(operator.or_, formulae)
 
-def all(formulae):
+def for_all(formulae):
     """
     Return a formula which is true if all of the given formulas are true.
 
