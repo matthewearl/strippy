@@ -27,12 +27,16 @@ converting them to CNF expressions in an efficient manner.
 """
 
 __all__ = (
+    'all',
+    'any',
     'to_cnf',
     'Var',
 )
 
 import abc
 import enum
+import functools
+import operator
 
 import cnf
 
@@ -280,3 +284,18 @@ def to_cnf(formula):
 
     """
     return formula._to_cnf()
+
+def any(formulae):
+    """
+    Return a formula which is true if any of the given formulas are true.
+
+    """
+    return functools.reduce(operator.or_, formulae)
+
+def all(formulae):
+    """
+    Return a formula which is true if all of the given formulas are true.
+
+    """
+    return functools.reduce(operator.and_, formulae)
+
