@@ -97,8 +97,8 @@ class Clause():
         return "Clause(terms={!r})".format(self.terms)
 
     def __str__(self):
-        return " v ".join(sorted((str(t) for t in self.terms),
-                                 key=(lambda t: t.var.name)))
+        return " v ".join(str(t) for t in
+                                sorted(self.terms, key=(lambda t: t.var.name)))
 
     def __iter__(self):
         return iter(self.terms)
@@ -148,8 +148,8 @@ class Expr():
         return Expr(clause for cnf in cnfs for clause in cnf)
 
     def print(self, file=sys.stdout):
-        for clause in self.clauses:
-            print(str(clause), file=file)
+        for s in sorted(str(c) for c in self.clauses):
+            print(s, file=file)
         print(file=file)
 
 def _pairwise_at_most_one(pvars):
