@@ -310,9 +310,6 @@ class Var(cnf.Var, _Formula):
         return self
 
     def _extract_clauses(self):
-        assert False, "TODO"
-
-    def _extract_clauses(self):
         return {cnf.Clause({cnf.Term(self)})}
             
 def to_cnf(formula):
