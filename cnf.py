@@ -106,6 +106,9 @@ class Clause():
     def __or__(self, other):
         return Clause(self.terms | other.terms)
 
+    def __len__(self):
+        return len(self.terms)
+
 class Expr():
     """
     A CNF expression.

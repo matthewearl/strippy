@@ -278,7 +278,7 @@ class _Op(_Formula):
             assert len(child_clauses[0]) == 1, \
                     "AND found under NOT in CNF formula"
             clause = next(iter(child_clauses[0]))
-            assert len(clause == 1), \
+            assert len(clause) == 1, \
                     "OR found under NOT in CNF formula"
             term = next(iter(clause))
             assert not term.negated, "NOT found under NOT in CNF formula"
