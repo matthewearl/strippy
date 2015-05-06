@@ -231,13 +231,12 @@ def place(board, components, nets):
         head_term = {t: term_to_net(t)[0]
                             for c in components
                             for t in c.terminals}
-        net_continuity_constraints = cnf.Expr(
-            cnf.Clause({cnf.Term(comp_pos[c, p], negated=True),
-                        cnf.Term(term_conn[head_term[t], h])})
-                for h in board.holes
-                for c in components
-                for t in c.terminals
-                for p in positions_which_have_term_in[t, h])
+        net_continuity_constraints = wff.to_cnf(
+            wff.for_all(comp_pos[c, p] >> term_conn[head_term[t], h]
+                                  for h in board.holes
+                                  for c in components
+                                  for t in c.terminals
+                                  for p in positions_which_have_term_in[t, h]))
         if _DEBUG:
             print("Net continuity constraints: {}".format(
                       net_continuity_constraints.stats))
