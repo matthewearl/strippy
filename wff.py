@@ -34,6 +34,7 @@ __all__ = (
 )
 
 import abc
+import collections
 import enum
 import functools
 import operator
@@ -139,6 +140,7 @@ class _Formula(metaclass=abc.ABCMeta):
         """
         raise NotImplemented
 
+    @staticmethod
     def _eliminate_constants(clauses):
         """
         Remove constants from a set of CNF clauses.
@@ -149,14 +151,14 @@ class _Formula(metaclass=abc.ABCMeta):
         """
 
         # Remove clauses that contain terms which are always true.
-        clauses = {clause for clause in clause if not
+        clauses = {clause for clause in clauses if not
                                   (_Term(True, negated=False) in clause or
                                    _Term(False, negated=True) in clause)}
 
         # Remove terms which are always false.
-        clauses = {{term for term in clause if 
+        clauses = {frozenset(term for term in clause if 
                                       term not in (_Term(False, negated=False),
-                                                   _Term(True, negated=True))}
+                                                   _Term(True, negated=True)))
                     for clause in clauses}
         
         return clauses
@@ -168,10 +170,10 @@ class _Formula(metaclass=abc.ABCMeta):
         formula = formula._move_nots()
         formula = formula._distribute_ors()
 
-        clauses = self._eliminate_constants(formula.extract_clauses())
+        clauses = self._eliminate_constants(formula._extract_clauses())
 
         expr = cnf.Expr(
-            cnf.Clause(cnf.Term(term.val, negated=term.negated)
+            cnf.Clause(cnf.Term(term.atom, negated=term.negated)
                                                             for term in clause)
                 for clause in clauses)
 
@@ -323,7 +325,7 @@ class _Op(_Formula):
             term = next(iter(clause))
             assert not term.negated, "NOT found under NOT in CNF formula"
 
-            out = {{_Term(term.atom, negated=True)}}
+            out = {frozenset({_Term(term.atom, negated=True)})}
 
         return out
 
@@ -350,7 +352,7 @@ class _Atom(_Formula):
         return self
 
     def _extract_clauses(self):
-        return {{_Term(self, negated=False)}}
+        return {frozenset({_Term(self, negated=False)})}
 
 class Var(cnf.Var, _Atom):
     def __init__(self, name=None):
