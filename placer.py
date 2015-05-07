@@ -157,7 +157,7 @@ def place(board, components, nets):
         # particular terminal. Defined for all holes, and the first terminal in
         # each net. (This is sufficient for validating (dis)continuity
         # constraints.
-        term_conn = {(n[0], h): cnf.Var("{} conn {}".format(n[0], h))
+        term_conn = {(n[0], h): wff.Var("{} conn {}".format(n[0], h))
                         for n in nets
                         for h in board.holes}
 
@@ -170,7 +170,7 @@ def place(board, components, nets):
         # to the nearest head terminal. Holes which are not connected to a
         # terminal will take the maximum value len(board.holes). Conversely,
         # holes which are connected will take a value < len(board.holes).
-        term_dist = {(h, i): cnf.Var("{} dist {}".format(h, i))
+        term_dist = {(h, i): wff.Var("{} dist {}".format(h, i))
                         for h in board.holes
                         for i in range(len(board.holes))}
 
@@ -184,7 +184,8 @@ def place(board, components, nets):
                     term_conn[net[0], h].iff(
                         wff.exists(term_conn[net[0], n]
                                                       for n in neighbours[h]) |
-                        comp_pos[net[0].component, p])
+                        wff.exists(comp_pos[net[0].component, p]
+                             for p in positions_which_have_term_in[net[0], h]))
                     for net in nets
                     for h in board.holes))
         if _DEBUG:
