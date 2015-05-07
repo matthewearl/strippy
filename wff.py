@@ -152,13 +152,13 @@ class _Formula(metaclass=abc.ABCMeta):
 
         # Remove clauses that contain terms which are always true.
         clauses = {clause for clause in clauses if not
-                                  (_Term(True, negated=False) in clause or
-                                   _Term(False, negated=True) in clause)}
+                            (_Term(_Const(True), negated=False) in clause or
+                             _Term(_Const(False), negated=True) in clause)}
 
         # Remove terms which are always false.
         clauses = {frozenset(term for term in clause if 
-                                      term not in (_Term(False, negated=False),
-                                                   _Term(True, negated=True)))
+                              term not in (_Term(_Const(False), negated=False),
+                                           _Term(_Const(True), negated=True)))
                     for clause in clauses}
         
         return clauses
