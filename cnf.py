@@ -151,7 +151,7 @@ class Expr():
         return Expr(clause for cnf in cnfs for clause in cnf)
 
     def print(self, file=sys.stdout):
-        for s in sorted(str(c) for c in self.clauses):
+        for s in sorted("({})".format(c) for c in self.clauses):
             print(s, file=file)
         print(file=file)
 
