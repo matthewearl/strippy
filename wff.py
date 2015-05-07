@@ -40,6 +40,16 @@ import operator
 
 import cnf
 
+class _Term(collections.namedtuple('_TermBase', ('atom', 'negated'))):
+    """
+    A single term in a CNF expression.
+    
+    Distinguised from a cnf.Term by the fact that the term may contain an atom
+    of any kind (a variable or a constant), as opposed to just a variable.
+    
+    """
+    pass
+
 class _Formula(metaclass=abc.ABCMeta):
     """
     Base class for formula types.
@@ -88,7 +98,7 @@ class _Formula(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def _eliminate_iff(self):
         """
-        Convert iff operations into two implies operations, ANDED
+        Convert iff operations into two implies operations, ANDed.
 
         """
         raise NotImplemented
@@ -104,7 +114,7 @@ class _Formula(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def _move_nots(self):
         """
-        Push nots inwards using De Morgan's Law.
+        Push NOTs inwards using De Morgan's Law.
 
         """
         raise NotImplemented
@@ -112,7 +122,7 @@ class _Formula(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def _distribute_ors(self):
         """
-        Distribute and over ors.
+        Distribute AND over ORs.
 
         """
         raise NotImplemented
@@ -120,22 +130,52 @@ class _Formula(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def _extract_clauses(self):
         """
-        Get cnf.Clause objects from a formula in CNF.
+        Get a set of CNF clauses for this formula.
+
+        Returns:
+            A set of sets of _Term objects. Each set of _Term objects
+            represents a clause of the CNF expression.
 
         """
         raise NotImplemented
 
-    def _to_cnf(self):
+    def _eliminate_constants(clauses):
         """
-        Implementation of `to_cnf()`.
+        Remove constants from a set of CNF clauses.
+
+        This amounts to removing clauses which contain terms which are always
+        true, and removing terms which are always false.
 
         """
+
+        # Remove clauses that contain terms which are always true.
+        clauses = {clause for clause in clause if not
+                                  (_Term(True, negated=False) in clause or
+                                   _Term(False, negated=True) in clause)}
+
+        # Remove terms which are always false.
+        clauses = {{term for term in clause if 
+                                      term not in (_Term(False, negated=False),
+                                                   _Term(True, negated=True))}
+                    for clause in clauses}
+        
+        return clauses
+
+    def _to_cnf(self):
+        """Implementation of `to_cnf()`."""
         formula = self._eliminate_iff()
         formula = formula._eliminate_implies()
         formula = formula._move_nots()
         formula = formula._distribute_ors()
 
-        return cnf.Expr(formula._extract_clauses())
+        clauses = self._eliminate_constants(formula.extract_clauses())
+
+        expr = cnf.Expr(
+            cnf.Clause(cnf.Term(term.val, negated=term.negated)
+                                                            for term in clause)
+                for clause in clauses)
+
+        return expr
 
 class _OpType(enum.Enum):
     NOT     = 1
@@ -267,13 +307,13 @@ class _Op(_Formula):
     def _extract_clauses(self):
         child_clauses = tuple(a._extract_clauses() for a in self._args)
 
-        if self._op_type == _OpType.OR:
+        if self._op_type == _OpType.AND:
+            out = child_clauses[0] | child_clauses[1]
+        elif self._op_type == _OpType.OR:
             assert all(len(a) == 1 for a in child_clauses), \
                     "AND found under OR in CNF formula"
             out = {next(iter(child_clauses[0])) | 
                    next(iter(child_clauses[1]))}
-        elif self._op_type == _OpType.AND:
-            out = child_clauses[0] | child_clauses[1]
         elif self._op_type == _OpType.NOT:
             assert len(child_clauses[0]) == 1, \
                     "AND found under NOT in CNF formula"
@@ -283,19 +323,19 @@ class _Op(_Formula):
             term = next(iter(clause))
             assert not term.negated, "NOT found under NOT in CNF formula"
 
-            out = {cnf.Clause((cnf.Term(term.var, negated=True),))}
+            out = {{_Term(term.atom, negated=True)}}
 
         return out
 
-class Var(cnf.Var, _Formula):
-    def __init__(self, name=None):
-        super().__init__(name=name)
+class _Atom(_Formula):
+    """
+    A formula which cannot be broken into smaller parts.
 
+    Either a variable, or a constant.
+
+    """
     def _is_op(self):
         return False
-
-    def __repr__(self):
-        return "Var({!r})".format(self.name)
 
     def _eliminate_iff(self):
         return self
@@ -310,7 +350,31 @@ class Var(cnf.Var, _Formula):
         return self
 
     def _extract_clauses(self):
-        return {cnf.Clause({cnf.Term(self)})}
+        return {{_Term(self, negated=False)}}
+
+class Var(cnf.Var, _Atom):
+    def __init__(self, name=None):
+        super().__init__(name=name)
+
+    def __repr__(self):
+        return "Var({!r})".format(self.name)
+
+class _Const(_Atom):
+    def __init__(self, val):
+        if not isinstance(val, bool):
+            raise ValueError
+        self.val = val
+
+    def __repr__(self):
+        return "Const({!r})".format(self.val)
+
+    def __hash__(self):
+        return hash((self.val, _Const))
+
+    def __eq__(self, other):
+        if not isinstance(other, _Const):
+            return False
+        return self.val == other.val
             
 def to_cnf(formula):
     """
@@ -324,12 +388,12 @@ def exists(formulae):
     Return a formula which is true if any of the given formulas are true.
 
     """
-    return functools.reduce(operator.or_, formulae)
+    return functools.reduce(operator.or_, formulae, _Const(False))
 
 def for_all(formulae):
     """
     Return a formula which is true if all of the given formulas are true.
 
     """
-    return functools.reduce(operator.and_, formulae)
+    return functools.reduce(operator.and_, formulae, _Const(True))
 
