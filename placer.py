@@ -32,6 +32,7 @@ __all__ = (
 import collections.abc
 
 import cnf
+import wff
 
 _DEBUG = True
 
@@ -127,7 +128,7 @@ def place(board, components, nets, allow_drilled=False):
         """
         # Make internal variables to determine whether a given component is in
         # a particular space.
-        occ = {(c, s): cnf.Var("{} occ {}".format(c, s))
+        occ = {(c, s): wff.Var("{} occ {}".format(c, s))
                for s in board.spaces for c in components}
 
         # Generate constraints to enforce the definition of `occ`. occ[s, c] is
@@ -138,18 +139,11 @@ def place(board, components, nets, allow_drilled=False):
                                                             if s in p.occupies]
                                   for c in components
                                   for s in board.spaces}
-        occ_constraints = cnf.Expr(
-            cnf.Clause({cnf.Term(occ[c, s], negated=True)} |
-                       {cnf.Term(comp_pos[c, p])
-                                        for p in positions_which_occupy[c, s]})
+        occ_constraints = wff.to_cnf(
+                wff.for_all(occ[c, s].iff(wff.exists(comp_pos[c, p]
+                                        for p in positions_which_occupy[c, s]))
                     for c in components
-                    for s in board.spaces)
-        occ_constraints |= cnf.Expr(
-            cnf.Clause({cnf.Term(comp_pos[c, p], negated=True),
-                        cnf.Term(occ[c, s])})
-                    for c in components
-                    for s in board.spaces
-                    for p in positions_which_occupy[c, s])
+                    for s in board.spaces))
 
         # Enforce that at most one component can occupy a space.
         one_component_per_space = cnf.Expr.all(
@@ -185,7 +179,7 @@ def place(board, components, nets, allow_drilled=False):
         # particular terminal. Defined for all holes, and the first terminal in
         # each net. (This is sufficient for validating (dis)continuity
         # constraints.
-        term_conn = {(n[0], h): cnf.Var("{} conn {}".format(n[0], h))
+        term_conn = {(n[0], h): wff.Var("{} conn {}".format(n[0], h))
                         for n in nets
                         for h in board.holes}
 
@@ -198,7 +192,7 @@ def place(board, components, nets, allow_drilled=False):
         # to the nearest head terminal. Holes which are not connected to a
         # terminal will take the maximum value len(board.holes). Conversely,
         # holes which are connected will take a value < len(board.holes).
-        term_dist = {(h, i): cnf.Var("{} dist {}".format(h, i))
+        term_dist = {(h, i): wff.Var("{} dist {}".format(h, i))
                         for h in board.holes
                         for i in range(len(board.holes))}
 
@@ -223,27 +217,15 @@ def place(board, components, nets, allow_drilled=False):
         # connected to the terminal or the terminal is in this hole. The first
         # expression handles the forward implication, whereas the second
         # expression handles the converse.
-        term_conn_constraints = cnf.Expr(
-            cnf.Clause({cnf.Term(term_conn[net[0], h], negated=True)} |
-                       {cnf.Term(neighbour_and_term_conn[net[0], h, n], n])
-                                                      for n in neighbours[h]} |
-                       {cnf.Term(comp_pos[net[0].component, p])
-                             for p in positions_which_have_term_in[net[0], h]})
+        term_conn_constraints = wff.to_cnf(
+            wff.for_all(
+                    term_conn[net[0], h].iff(
+                        wff.exists(term_conn[net[0], n]
+                                                      for n in neighbours[h]) |
+                        wff.exists(comp_pos[net[0].component, p]
+                             for p in positions_which_have_term_in[net[0], h]))
                     for net in nets
-                    for h in board.holes)
-        term_conn_constraints |= cnf.Expr(
-            {cnf.Clause({cnf.Term(term_conn[net[0], h]),
-                        cnf.Term(neighbour_and_term_conn[net[0], h, n],
-                                                                negated=True)})
-                    for net in nets
-                    for h in board.holes
-                    for n in neighbours[h]} |
-            {cnf.Clause({cnf.Term(term_conn[net[0], h]),
-                         cnf.Term(comp_pos[net[0].component, p],
-                                                                negated=True)})
-                    for net in nets
-                    for h in board.holes
-                    for p in positions_which_have_term_in[net[0], h]})
+                    for h in board.holes))
         if _DEBUG:
             print("Term conn constraints: {}".format(
                       term_conn_constraints.stats))
@@ -253,41 +235,29 @@ def place(board, components, nets, allow_drilled=False):
         # such that a head terminal is in hole `h`. The first statement
         # expresses the forward implication, and the second statement expresses
         # the converse.
-        zero_term_dist_constraints = cnf.Expr(
-            cnf.Clause({cnf.Term(term_dist[h, 0])} |
-                        {cnf.Term(comp_pos[net[0].component, p])
+        zero_term_dist_constraints = wff.to_cnf(
+                wff.for_all(
+                    (~term_dist[h, 0]).iff(
+                        wff.exists(comp_pos[net[0].component, p]
                              for net in nets
-                             for p in positions_which_have_term_in[net[0], h]})
-                    for h in board.holes)
-        zero_term_dist_constraints |= cnf.Expr(
-            cnf.Clause({cnf.Term(comp_pos[net[0].component, p], negated=True),
-                        cnf.Term(term_dist[h, 0], negated=True)})
-                    for h in board.holes
-                    for net in nets
-                    for p in positions_which_have_term_in[net[0], h])
+                             for p in positions_which_have_term_in[net[0], h]))
+                    for h in board.holes))
         if _DEBUG:
             print("Zero term dist constraints: {}".format(
                       zero_term_dist_constraints.stats))
 
         # Add constraints to enforce the definition of `term_dist[h, i]`, for
-        # 0 < 1 < |holes|. term_dist[h, i] is true iff all for each neighbour
-        # `n` term_dist[n, i - 1] is true. The first statement expresses the
+        # 0 < 1 < |holes|. term_dist[h, i] is true iff for each neighbour `n`
+        # term_dist[n, i - 1] is true. The first statement expresses the
         # forward implication, and the second statement expresses the converse.
-        non_zero_term_dist_constraints = cnf.Expr(
-            {cnf.Clause({cnf.Term(term_dist[h, i], negated=True),
-                        cnf.Term(term_dist[h, i - 1])})}
-            {cnf.Clause({cnf.Term(term_dist[h, i], negated=True),
-                         cnf.Term(link_pres[_Link(h, n)], negated=True),
-                         cnf.Term(term_dist[n, i - 1])})
-                                            for n in neighbours[h]}
-                for h in board.holes
-                for i in range(1, len(board.holes)))
-        non_zero_term_dist_constraints |= cnf.Expr(
-            cnf.Clause({cnf.Term(term_dist[n, i - 1], negated=True)
-                                                for n in [h] + neighbours[h]} |
-                       {cnf.Term(term_dist[h, i])})
+        #@@@ Integrate link_pres[] into the below
+        non_zero_term_dist_constraints = wff.to_cnf(
+                wff.for_all(
+                    term_dist[h, i].iff(
+                        wff.for_all(
+                            term_dist[n, i - 1] for n in [h] + neighbours[h]))
                     for h in board.holes
-                    for i in range(1, len(board.holes)))
+                    for i in range(1, len(board.holes))))
         if _DEBUG:
             print("Non-zero term dist contraints: {}".format(
                       non_zero_term_dist_constraints.stats))
@@ -301,13 +271,12 @@ def place(board, components, nets, allow_drilled=False):
         head_term = {t: term_to_net(t)[0]
                             for c in components
                             for t in c.terminals}
-        net_continuity_constraints = cnf.Expr(
-            cnf.Clause({cnf.Term(comp_pos[c, p], negated=True),
-                        cnf.Term(term_conn[head_term[t], h])})
-                for h in board.holes
-                for c in components
-                for t in c.terminals
-                for p in positions_which_have_term_in[t, h])
+        net_continuity_constraints = wff.to_cnf(
+            wff.for_all(comp_pos[c, p] >> term_conn[head_term[t], h]
+                                  for h in board.holes
+                                  for c in components
+                                  for t in c.terminals
+                                  for p in positions_which_have_term_in[t, h]))
         if _DEBUG:
             print("Net continuity constraints: {}".format(
                       net_continuity_constraints.stats))
@@ -335,7 +304,7 @@ def place(board, components, nets, allow_drilled=False):
     # Make variables to indicate whether a component is in a particular
     # position. Assignments for these variables will be used to produce
     # placements.
-    comp_pos = {(comp, pos): cnf.Var("comp {} in pos {}".format(comp, pos))
+    comp_pos = {(comp, pos): wff.Var("comp {} in pos {}".format(comp, pos))
                     for comp in components
                     for pos in positions[comp]}
 
