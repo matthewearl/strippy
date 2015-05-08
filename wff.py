@@ -27,6 +27,7 @@ converting them to CNF expressions in an efficient manner.
 """
 
 __all__ = (
+    'add_var',
     'for_all',
     'exists',
     'to_cnf',
@@ -140,6 +141,20 @@ class _Formula(metaclass=abc.ABCMeta):
         """
         raise NotImplemented
 
+    @abc.abstractmethod
+    def _create_intermediate_vars(self):
+        """
+        Replace sub-formulae with intermediate vars, if needed.
+
+        A sub-formula is replaced if it is wrapped with _AddVarFlag.
+
+        Returns:
+            A CNF expression to enforce the definition of the new variables,
+            and the formula with the variables in place of the sub trees.
+
+        """
+        raise NotImplemented
+
     @staticmethod
     def _eliminate_constants(clauses):
         """
@@ -165,7 +180,10 @@ class _Formula(metaclass=abc.ABCMeta):
 
     def _to_cnf(self):
         """Implementation of `to_cnf()`."""
-        formula = self._eliminate_iff()
+
+        intermediate_vars_expr, formula = self._create_intermediate_vars()
+
+        formula = formula._eliminate_iff()
         formula = formula._eliminate_implies()
         formula = formula._move_nots()
         formula = formula._distribute_ors()
@@ -177,7 +195,7 @@ class _Formula(metaclass=abc.ABCMeta):
                                                             for term in clause)
                 for clause in clauses)
 
-        return expr
+        return expr | intermediate_vars_expr
 
 class _OpType(enum.Enum):
     NOT     = 1
@@ -329,6 +347,16 @@ class _Op(_Formula):
 
         return out
 
+    @abc.abstractmethod
+    def _create_intermediate_vars(self):
+        child_results = tuple(a._create_intermediate_vars()
+                                                           for a in self._args)
+
+        child_exprs = cnf.Expr.all(r[0] for r in child_results)
+        child_formulae = [r[1] for r in child_results]
+
+        return child_exprs, _Op(self._op_type, child_formulae)
+
 class _Atom(_Formula):
     """
     A formula which cannot be broken into smaller parts.
@@ -354,6 +382,10 @@ class _Atom(_Formula):
     def _extract_clauses(self):
         return {frozenset({_Term(self, negated=False)})}
 
+    @abc.abstractmethod
+    def _create_intermediate_vars(self):
+        return cnf.Expr(()), self
+
 class Var(cnf.Var, _Atom):
     def __init__(self, name=None):
         super().__init__(name=name)
@@ -377,6 +409,18 @@ class _Const(_Atom):
         if not isinstance(other, _Const):
             return False
         return self.val == other.val
+
+class _AddVarFlag(_Formula):
+    def __init__(self, formula):
+        self.formula = formula
+
+    @abc.abstractmethod
+    def _create_intermediate_vars(self):
+        new_var = Var()
+
+        expr, formula = self.formula._create_intermediate_vars()
+
+        return to_cnf(new_var.iff(formula)) | expr, new_var
             
 def to_cnf(formula):
     """
@@ -398,4 +442,11 @@ def for_all(formulae):
 
     """
     return functools.reduce(operator.and_, formulae, _Const(True))
+
+def add_var(formula):
+    """
+    Flag that an intermediate variable should represent the given formula.
+
+    """
+    return _AddVarFlag(formula)
 
