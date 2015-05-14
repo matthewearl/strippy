@@ -47,7 +47,7 @@ class Placement(collections.abc.Mapping):
     def __init__(self, board, mapping, drilled_holes):
         self.board = board
         self._mapping = mapping
-        self._drilled_holes = drilled_holes
+        self.drilled_holes = drilled_holes
 
     def __getitem__(self, key):
         return self._mapping[key]
@@ -67,7 +67,7 @@ class Placement(collections.abc.Mapping):
                 ", ".join("{}:{}".format(terminal.label,
                                          pos.terminal_positions[terminal])
                                          for terminal in comp.terminals)))
-        print("Drilled: {}".format(self._drilled_holes))
+        print("Drilled: {}".format(self.drilled_holes))
 
 class _Link():
     """
@@ -89,7 +89,10 @@ class _Link():
     def __hash__(self):
         return hash((self.h1, self.h2))
 
-def place(board, components, nets, allow_drilled=False):
+    def __repr__(self):
+        return "_Link({!r}, {!r})".format(self.h1, self.h2)
+
+def place(board, components, nets, *, allow_drilled=False):
     """
     Place components on a board, according to a net list.
 
@@ -282,7 +285,6 @@ def place(board, components, nets, allow_drilled=False):
 
         # Return all of the above.
         return (term_conn_constraints |
-                neighbour_and_term_conn_constraints |
                 zero_term_dist_constraints |
                 non_zero_term_dist_constraints |
                 net_discontinuity_constraints |
@@ -315,8 +317,8 @@ def place(board, components, nets, allow_drilled=False):
     link_pres = {l: wff.Var("{} present".format(l)) for l in links}
 
     # Enforce the relationship between `drilled` and `link_pres`.
-    hole_to_links = {h: {_Link(*tr) for tr in board.traces if h in tr} for h in
-                     board.holes}
+    hole_to_links = {h: {_Link(*tr) for tr in board.traces if h in tr}
+                                                          for h in board.holes}
     drilled_link_constraints = wff.to_cnf(
         wff.for_all(
             drilled[h].iff(wff.for_all(~link_pres[l]
@@ -347,7 +349,7 @@ def place(board, components, nets, allow_drilled=False):
                 print("{} {}".format("~" if not val else " ", var))
         mapping = {comp: pos
                      for (comp, pos), var in comp_pos.items() if sol[var]}
-        drilled_holes = {h for h in holes if sol[drilled_holes[h]]}
+        drilled_holes = {h for h in board.holes if sol[drilled[h]]}
 
         # If this fails the "exactly one position" constraint has been
         # violated.

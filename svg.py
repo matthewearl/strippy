@@ -66,10 +66,10 @@ def _draw_drilled_hole(h, file=sys.stdout):
 
     r = _CROSS_SIZE / 2.
 
-    cross_coords = (((center[0] - r), (center[1] - r),
-                     (center[0] + r), (center[1] + r)),
-                    ((center[0] + r), (center[1] - r),
-                     (center[0] - r), (center[1] + r)))
+    cross_coords = (((center[0] - r, center[1] - r),
+                     (center[0] + r, center[1] + r)),
+                    ((center[0] + r, center[1] - r),
+                     (center[0] - r, center[1] + r)))
 
     for i in range(2):
         print('<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="{}" '
