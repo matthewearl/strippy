@@ -196,22 +196,6 @@ def place(board, components, nets, allow_drilled=False):
                         for h in board.holes
                         for i in range(len(board.holes))}
 
-        # Internal variables are needed for the expression link_pres[h, n] ^
-        # term_conn[t, n] for all head terminals t, all holes h, and all
-        # neighbours n of each hole. 
-        neighbour_and_term_conn = {(net[0], h, n):
-               tseitin_and(link_pres[_Link(h, n)], term_conn[t, n])
-                    for net in nets
-                    for h in board.holes
-                    for n in neighbours[h]}
-
-        # Pull out the cnf exprs from the above, and just leave the vars as
-        # values.
-        neighbour_and_term_conn_constraints = cnf.Expr.all(
-                        expr for var, expr in neighbour_and_term_conn.values())
-        neighbour_and_term_conn = {k: var for k, (var, expr) in
-                                               neighbour_and_term_conn.items()}
-
         # Generate constraints to enforce the definition of `term_conn`. A hole
         # is connected to a particular terminal iff one of its neighbours is
         # connected to the terminal or the terminal is in this hole. The first
@@ -220,7 +204,8 @@ def place(board, components, nets, allow_drilled=False):
         term_conn_constraints = wff.to_cnf(
             wff.for_all(
                     term_conn[net[0], h].iff(
-                        wff.exists(term_conn[net[0], n]
+                        wff.exists(wff.add_var(
+                            term_conn[net[0], n] & link_pres[_Link(h, n)])
                                                       for n in neighbours[h]) |
                         wff.exists(comp_pos[net[0].component, p]
                              for p in positions_which_have_term_in[net[0], h]))
@@ -250,12 +235,14 @@ def place(board, components, nets, allow_drilled=False):
         # 0 < 1 < |holes|. term_dist[h, i] is true iff for each neighbour `n`
         # term_dist[n, i - 1] is true. The first statement expresses the
         # forward implication, and the second statement expresses the converse.
-        #@@@ Integrate link_pres[] into the below
         non_zero_term_dist_constraints = wff.to_cnf(
                 wff.for_all(
                     term_dist[h, i].iff(
                         wff.for_all(
-                            term_dist[n, i - 1] for n in [h] + neighbours[h]))
+                            wff.add_var(term_dist[n, i - 1] |
+                                        ~link_pres[_Link(h, n)])
+                                                    for n in neighbours[h]) &
+                        term_dist[h, i - 1])
                     for h in board.holes
                     for i in range(1, len(board.holes))))
         if _DEBUG:
@@ -315,30 +302,32 @@ def place(board, components, nets, allow_drilled=False):
                                     for comp in components)
 
     # Make variables to indicate holes which have been drilled out.
-    drilled = {h: cnf.Var("{} drilled".format(h)) for h in board.holes}
+    drilled = {h: wff.Var("{} drilled".format(h)) for h in board.holes}
 
     # Create `links`, using `board.traces`. This is used when building the
     # continuity constraints rather than using `board.traces` directly. In
     # future, `links` will be extended to include other possible conductive
     # elements (eg. jumper wires).
-    links = [_Link(l) for l in board.traces]
+    links = [_Link(*l) for l in board.traces]
     
     # Make internal variables which indicate which links are present in the
     # solution.
-    link_pres = {l: cnf.Var("{} present".format(l)) for l in links}
+    link_pres = {l: wff.Var("{} present".format(l)) for l in links}
 
     # Enforce the relationship between `drilled` and `link_pres`.
-    hole_to_links = {h: {_Link(tr) for tr in board.traces if h in tr} for h in
+    hole_to_links = {h: {_Link(*tr) for tr in board.traces if h in tr} for h in
                      board.holes}
-    drilled_link_constraints = cnf.Expr(
-        cnf.Clause({cnf.Term(drilled[h], negated=True),
-                    cnf.Term(link_pres[l], negated=True)})
-                for h in board.holes
-                for l in hole_to_links[h])
-    drilled_link_constraints |= cnf.Expr(
-        cnf.Clause({cnf.Term(link_pres[l]) for l in hole_to_links[h]} |
-                   {cnf.Term(drilled[h])})
-                for h in board.holes)
+    drilled_link_constraints = wff.to_cnf(
+        wff.for_all(
+            drilled[h].iff(wff.for_all(~link_pres[l]
+                                        for l in hole_to_links[h]))
+                for h in board.holes))
+
+    # If drilling is not allowed, then force drilled[h] to be false for all
+    # holes `h`.
+    if not allow_drilled:
+        drilled_link_constraints |= wff.to_cnf(
+                                wff.for_all(~drilled[h] for h in board.holes))
 
     # Combine all the constraints into a single expression.
     expr = (one_pos_per_comp | 
