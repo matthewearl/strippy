@@ -317,13 +317,9 @@ def place(board, components, nets, *, allow_drilled=False):
     link_pres = {l: wff.Var("{} present".format(l)) for l in links}
 
     # Enforce the relationship between `drilled` and `link_pres`.
-    hole_to_links = {h: {_Link(*tr) for tr in board.traces if h in tr}
-                                                          for h in board.holes}
     drilled_link_constraints = wff.to_cnf(
-        wff.for_all(
-            drilled[h].iff(wff.for_all(~link_pres[l]
-                                        for l in hole_to_links[h]))
-                for h in board.holes))
+        wff.for_all(link_pres[l].iff(~drilled[l.h1] & ~drilled[l.h2])
+                                                               for l in links))
 
     # If drilling is not allowed, then force drilled[h] to be false for all
     # holes `h`.
