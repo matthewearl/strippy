@@ -347,7 +347,6 @@ class _Op(_Formula):
 
         return out
 
-    @abc.abstractmethod
     def _create_intermediate_vars(self):
         child_results = tuple(a._create_intermediate_vars()
                                                            for a in self._args)
@@ -382,7 +381,6 @@ class _Atom(_Formula):
     def _extract_clauses(self):
         return {frozenset({_Term(self, negated=False)})}
 
-    @abc.abstractmethod
     def _create_intermediate_vars(self):
         return cnf.Expr(()), self
 
@@ -414,13 +412,30 @@ class _AddVarFlag(_Formula):
     def __init__(self, formula):
         self.formula = formula
 
-    @abc.abstractmethod
     def _create_intermediate_vars(self):
         new_var = Var()
 
         expr, formula = self.formula._create_intermediate_vars()
 
         return to_cnf(new_var.iff(formula)) | expr, new_var
+
+    def _is_op(self):
+        raise AssertionError
+
+    def _eliminate_iff(self):
+        raise AssertionError
+
+    def _eliminate_implies(self):
+        raise AssertionError
+
+    def _move_nots(self):
+        raise AssertionError
+
+    def _distribute_ors(self):
+        raise AssertionError
+
+    def _extract_clauses(self):
+        raise AssertionError
             
 def to_cnf(formula):
     """
