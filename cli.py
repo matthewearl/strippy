@@ -34,14 +34,19 @@ import placer
 import svg
 
 def main(board, components, nets, args=None):
+    sys.setrecursionlimit(100000)
+
     parser = argparse.ArgumentParser( description='Find circuit placements.')
     parser.add_argument('--first-only', action='store_true',
                         help="Only output the first solution")
+    parser.add_argument('--allow-drilled', action='store_true',
+                        help="Allow holes to be drilled out")
     parser.add_argument('--svg', nargs='?', const=True,
                         help="Output SVG for the solutions")
     parsed_args = parser.parse_args(args if args is not None else sys.argv[1:])
 
-    placement_iter = placer.place(board, components, nets)
+    placement_iter = placer.place(board, components, nets,
+                                  allow_drilled=parsed_args.allow_drilled)
 
     if parsed_args.first_only:
         placement_iter = [next(placement_iter)]
