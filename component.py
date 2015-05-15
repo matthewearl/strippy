@@ -66,6 +66,30 @@ class Position():
 
         return Position(offset_occupies, offset_terminal_positions) 
 
+    def rotate(self, angle):
+        """
+        Rotate a position counter-clockwise.
+
+        Angle is the number of 90 degree CCW rotations to perform.
+
+        """
+
+        def rot_point(p):
+            x, y = p
+            if angle == 0:
+                return x, y
+            if angle == 1:
+                return y, -x
+            if angle == 2:
+                return -x, -y
+            if angle == 3:
+                return -y, x
+
+        rotated_occupies = {rot_point(p) for p in self.occupies}
+        rotated_terminal_positions = {t: rot_point(p) for t, p in
+                                               self.terminal_positions.items()}
+        return Position(rotated_occupies, rotated_terminal_positions)
+
     def fits(self, board):
         """
         Indicate whether this position fits on the board.
@@ -235,4 +259,39 @@ class LeadedComponent(Component):
                 yield Position({(x, 0) for x in range(-length, 1)},
                                {self.terminals[0]: (0, 0),
                                 self.terminals[1]: (-length, 0)})
+
+class DualInlinePackage(Component):
+    """
+    Class for dual-inline package components (aka. DIP).
+
+    """
+
+    def __init__(self, label, num_terminals, *, row_spacing=3,
+                 color="#808080"):
+        if num_terminals % 2 != 0:
+            raise ValueError
+        terminals = tuple(Terminal(i + 1) for i in range(num_terminals))
+
+        self._row_spacing = row_spacing
+        self._length = num_terminals / 2
+
+        super().__init__(label, terminals, color=color)
+
+    def get_relative_positions(self):
+
+        # Construct a vertically oriented position, with terminal number
+        # initially increasing with Y coordinate. As per convention, terminal
+        # numbering is clockwise.
+        occupies = {(x, y) for x in range(self._row_spacing + 1)
+                            for y in range(self._length)}
+        left_positions = {t: (0, i)
+                          for i, t in enumerate(self.terminals[:self._length])}
+        right_positions = {t: (self._row_spacing, self._length - i - 1)
+                          for i, t in enumerate(self.terminals[self._length:])}
+        pos = Position(occupies, 
+                       dict(left_positions.items() | right_positions.items()))
+
+        # Rotate the position through the 4 angles.
+        for angle in range(4):
+            yield pos.rotate(angle)
 
