@@ -272,7 +272,7 @@ class Resistor(LeadedComponent):
 
     """
     def __init__(self, *args, color="#008000", **kwargs):
-        super().__init__(*args, **kwargs, color=color)
+        super().__init__(*args, color=color, **kwargs)
 
 class Capacitor(LeadedComponent):
     """
@@ -282,7 +282,7 @@ class Capacitor(LeadedComponent):
 
     """
     def __init__(self, *args, color="#000080", **kwargs):
-        super().__init__(*args, **kwargs, color=color)
+        super().__init__(*args, color=color, **kwargs)
 
 class DualInlinePackage(Component):
     """
