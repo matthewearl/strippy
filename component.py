@@ -26,6 +26,7 @@ Component and board class definitions.
 __all__ = (
     'Board',
     'Component',
+    'DualInlinePackage',
     'LeadedComponent',
     'Position',
     'StripBoard',
@@ -262,7 +263,7 @@ class LeadedComponent(Component):
 
 class DualInlinePackage(Component):
     """
-    Class for dual-inline package components (aka. DIP).
+    Class for dual-inline package (aka. DIP) components.
 
     """
 
@@ -273,12 +274,11 @@ class DualInlinePackage(Component):
         terminals = tuple(Terminal(i + 1) for i in range(num_terminals))
 
         self._row_spacing = row_spacing
-        self._length = num_terminals / 2
+        self._length = num_terminals // 2
 
         super().__init__(label, terminals, color=color)
 
     def get_relative_positions(self):
-
         # Construct a vertically oriented position, with terminal number
         # initially increasing with Y coordinate. As per convention, terminal
         # numbering is clockwise.
