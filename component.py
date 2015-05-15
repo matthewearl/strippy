@@ -25,10 +25,12 @@ Component and board class definitions.
 
 __all__ = (
     'Board',
+    'Capacitor',
     'Component',
     'DualInlinePackage',
     'LeadedComponent',
     'Position',
+    'Resistor',
     'StripBoard',
     'Terminal',
 )
@@ -189,7 +191,7 @@ class Component(metaclass=abc.ABCMeta):
         terminals: Iterable of terminals tht belong to this component.
 
     """
-    def __init__(self, label, terminals, color="#008000"):
+    def __init__(self, label, terminals, *, color):
         self.label = str(label)
         self.terminals = tuple(terminals)
         for terminal in self.terminals:
@@ -235,14 +237,15 @@ class LeadedComponent(Component):
 
     def __init__(self, label, max_length, *,
                  allow_vertical=True,
-                 allow_horizontal=True):
+                 allow_horizontal=True,
+                 color):
         terminals = (Terminal(1), Terminal(2))
 
         self._max_length = max_length
         self._allow_horizontal = allow_horizontal
         self._allow_vertical = allow_vertical
 
-        super().__init__(label, terminals)
+        super().__init__(label, terminals, color=color)
 
     def get_relative_positions(self):
         for length in range(1, self._max_length + 1):
@@ -260,6 +263,26 @@ class LeadedComponent(Component):
                 yield Position({(x, 0) for x in range(-length, 1)},
                                {self.terminals[0]: (0, 0),
                                 self.terminals[1]: (-length, 0)})
+
+class Resistor(LeadedComponent):
+    """
+    Class for resistors.
+
+    Just a leaded component with a default color.
+
+    """
+    def __init__(self, *args, color="#008000", **kwargs):
+        super().__init__(*args, **kwargs, color=color)
+
+class Capacitor(LeadedComponent):
+    """
+    Class for unpolarized capacitors.
+
+    Just a leaded component with a default color.
+
+    """
+    def __init__(self, *args, color="#000080", **kwargs):
+        super().__init__(*args, **kwargs, color=color)
 
 class DualInlinePackage(Component):
     """

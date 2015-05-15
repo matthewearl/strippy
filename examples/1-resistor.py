@@ -27,7 +27,7 @@ Trivial example, placing a single resistor on a 2x2 strip board.
 import component
 import cli
 
-r1 = component.LeadedComponent("R1", 1)
+r1 = component.Resistor("R1", 1)
 
 board = component.StripBoard((1, 2))
 

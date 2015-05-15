@@ -30,10 +30,10 @@ maximum length of 3. There should be 12 solutions in total.
 import component
 import cli
 
-r1 = component.LeadedComponent("R1", 3)
-r2 = component.LeadedComponent("R2", 1)
-r3 = component.LeadedComponent("R3", 1)
-r4 = component.LeadedComponent("R4", 1)
+r1 = component.Resistor("R1", 3)
+r2 = component.Resistor("R2", 1)
+r3 = component.Resistor("R3", 1)
+r4 = component.Resistor("R4", 1)
 components = (r1, r2, r3, r4)
 
 board = component.StripBoard((3, 4))

@@ -27,8 +27,8 @@ Simple example, placing 2 resistors in parallel on a 2x2 strip board.
 import component
 import cli
 
-r1 = component.LeadedComponent("R1", 1)
-r2 = component.LeadedComponent("R2", 1)
+r1 = component.Resistor("R1", 1)
+r2 = component.Resistor("R2", 1)
 components = (r1, r2)
 
 board = component.StripBoard((2, 2))
