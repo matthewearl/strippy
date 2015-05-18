@@ -95,6 +95,18 @@ class _Link():
         return "_Link({!r}, {!r}, {!r})".format(
                                                self.h1, self.h2, self.pres_var)
 
+    @property
+    def holes(self):
+        return {self.h1, self.h2}
+
+    def get_other(self, h):
+        if h == self.h1:
+            return self.h2
+        elif h == self.h2:
+            return self.h1
+        else:
+            assert False
+
 class _Jumper():
     """
     Represents a jumper.
@@ -139,7 +151,7 @@ class _Jumper():
         return set(gen_coords())
 
     @classmethod
-    def gen_jumpers(cls, board):
+    def gen_jumpers(cls, board, max_jumper_length):
         """Generate valid jumpers for a board."""
 
         def gen_all():
@@ -211,7 +223,8 @@ def place(board, components, nets, *,
 
         # Enforce that at most one component/jumper can occupy a space.
         jumpers_that_occupy_space = {s:
-                                       [j for j in jumpers if s in j.occupies]}
+                                       [j for j in jumpers if s in j.occupies]
+                                     for s in board.spaces}
 
         one_component_per_space = cnf.Expr.all(
                  cnf.at_most_one(
@@ -240,11 +253,13 @@ def place(board, components, nets, *,
                     for h in board.holes}
 
         # Produce an adjacency dict for the electrical continuity graph implied
-        # by board.holes and board.traces.
-        neighbours = {h1: [(l.h2, l.pres_var) for l in links if h1 == l.h1]
-                                                       for h1 in board.holes} |
-                     {h2: [(l.h1, l.pres_var) for l in links if h2 == l.h2]
-                                                       for h2 in board.holes}
+        # by links. Include the variable that must be true for said neighbour
+        # to be present.
+        neighbours = {h: [(l.get_other(h), l.pres_var) 
+                             for l in links if h in l.holes]
+                         for h in board.holes} 
+        from pprint import pprint
+        pprint(neighbours)
 
         # Make internal variables to indicate whether a hole is connected to a
         # particular terminal. Defined for all holes, and the first terminal in
@@ -371,14 +386,12 @@ def place(board, components, nets, *,
                                     for comp in components)
 
     # Make jumpers, and their associated links.
-    jumpers = [_Jumper(h1, h2) in _Jumper.gen_jumpers(board)]
-    jumper_links = [_Link(j.h1, j.h2, j.pres_var))
-                                                    for h1, h2 in gen_jumpers()
-                                                    if h2 in board.holes]
+    jumpers = [j for j in _Jumper.gen_jumpers(board, max_jumper_length)]
+    jumper_links = [_Link(j.h1, j.h2, j.pres_var) for j in jumpers]
 
     # Make links for each trace.
-    trace_links = [_Link(*l, Var("trace {} link".format(l)))
-                                                         for l in board.traces]
+    trace_links = [_Link(h1, h2, wff.Var("trace {} link".format((h1, h2))))
+                                                    for h1, h2 in board.traces]
 
     # Make variables to indicate holes which have been drilled out.
     drilled = {h: wff.Var("{} drilled".format(h)) for h in board.holes}
@@ -387,7 +400,7 @@ def place(board, components, nets, *,
     # neither of the holes it is connected to are drilled.
     drilled_link_constraints = wff.to_cnf(
         wff.for_all(l.pres_var.iff(~drilled[l.h1] & ~drilled[l.h2])
-                                                               for l in links))
+                                                         for l in trace_links))
 
     links = jumper_links + trace_links
 
