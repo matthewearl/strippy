@@ -36,6 +36,7 @@ _HOLE_RADIUS = 10.
 _TERMINAL_RADIUS = 20
 _HOLE_COLOR = "#B0B0B0"
 _TRACE_COLOR = "#B0B0B0"
+_JUMPER_COLOR = "black"
 _FONT_SIZE = 10
 _FONT_COLOR = "black"
 _FONT_FAMILY = "Verdana"
@@ -78,6 +79,15 @@ def _draw_drilled_hole(h, file=sys.stdout):
                 cross_coords[i][1][0], cross_coords[i][1][1],
                 _CROSS_COLOR, _LINE_WIDTH),
               file=file)
+
+def _draw_jumper(j, file=sys.stdout):
+    points = tuple(_grid_coords_to_pixel(h, center=True) for h in j)
+
+    print('<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="{}" '
+          'stroke-width="{}" />'.format(
+            points[0][0], points[0][1], points[1][0], points[1][1],
+            _JUMPER_COLOR, _LINE_WIDTH),
+          file=file)
 
 def _draw_trace(t, file=sys.stdout):
     points = tuple(_grid_coords_to_pixel(t[i], center=True) for i in range(2))
@@ -187,6 +197,9 @@ def print_svg(placements, file=sys.stdout):
 
         for hole in placement.drilled_holes:
             _draw_drilled_hole(hole, file=file)
+
+        for link in placement.jumpers:
+            _draw_jumpers(jumper, file=file)
 
         for comp, pos in placement.items():
             _draw_component_terminals(comp, pos, file=file)

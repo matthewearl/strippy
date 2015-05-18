@@ -34,7 +34,7 @@ import collections.abc
 import cnf
 import wff
 
-_DEBUG = True
+_DEBUG = False
 
 class Placement(collections.abc.Mapping):
     """
@@ -44,10 +44,11 @@ class Placement(collections.abc.Mapping):
 
     """
 
-    def __init__(self, board, mapping, drilled_holes):
+    def __init__(self, board, mapping, drilled_holes, jumpers):
         self.board = board
         self._mapping = mapping
         self.drilled_holes = drilled_holes
+        self.jumpers = jumpers
 
     def __getitem__(self, key):
         return self._mapping[key]
@@ -68,31 +69,89 @@ class Placement(collections.abc.Mapping):
                                          pos.terminal_positions[terminal])
                                          for terminal in comp.terminals)))
         print("Drilled: {}".format(self.drilled_holes))
+        print("Jumpers: {}".format(self.jumpers))
 
 class _Link():
     """
     A link is a conductive element between two holes.
 
-    It is represented by the unordered set of the two holes that it goes
-    between.
+    It's an abstraction of the concept of jumpers and traces used when
+    constructing continuity constraints.
+
+    Attributes:
+        h1: The coordinates of the first hole.
+        h2: The coordinates of the second hole.
+        pres_var: Variable indicating whether the link is present.
+
+    """
+
+    def __init__(self, h1, h2, pres_var):
+        if h2 < h1:
+            h1, h2 = h2, h1
+        self.h1, self.h2 = h1, h2
+        self.pres_var = pres_var 
+
+    def __repr__(self):
+        return "_Link({!r}, {!r}, {!r})".format(
+                                               self.h1, self.h2, self.pres_var)
+
+class _Jumper():
+    """
+    Represents a jumper.
+
+    A jumper is a conductive horizontal or vertical link between two holes. It
+    also occupies the space between those holes.
+
+    Attributes:
+        h1: The coordinates of the first hole. This must be to the left of (in
+            the case of a horizontal link) or above (in the case of a vertical
+            link) the second hole.
+        h2: The coordinates of the second hole.
+        pres_var: Variable indicating whether the jumper is present.
 
     """
 
     def __init__(self, h1, h2):
-        if h2 < h1:
-            h1, h2 = h2, h1
-        self.h1, self.h2 = h1, h2
-        
-    def __eq__(self, other):
-        return (self.h1, self.h2) == (other.h1, other.h2)
+        assert h1[0] == h2[0] or h1[1] == h2[1]
+        assert h1 < h2
 
-    def __hash__(self):
-        return hash((self.h1, self.h2))
+        self.h1 = h1
+        self.h2 = h2
+        self.pres_var = wff.Var("{}->{} jumper".format(h1, h2))
+        self.occupies = self._get_occupies()
 
-    def __repr__(self):
-        return "_Link({!r}, {!r})".format(self.h1, self.h2)
+    def _get_occupies(self):
+        if h2[0] - h1[0] == 0:
+            assert h1[1] < h2[1]
+            inc = 0, 1
+        elif h2[1] - h2[1] == 0:
+            assert h1[0] < h2[0]
+            inc = 1, 0
+        else:
+            assert False
 
-def place(board, components, nets, *, allow_drilled=False):
+        def gen_coords():
+            h = h1
+            while h != h2:
+                yield h
+                h = h[0] + inc[0], h[1] + inc[1]
+
+        return set(gen_coords())
+
+    @classmethod
+    def gen_jumpers(cls, board):
+        """Generate valid jumpers for a board."""
+
+        def gen_all():
+            for hole in board.holes:
+                for length in range(1, max_jumper_length + 1):
+                    yield hole, (hole[0] + length, hole[1])
+                    yield hole, (hole[0], hole[1] + length)
+
+        return (cls(h1, h2) for h1, h2 in gen_all() if h2 in board.holes)
+
+def place(board, components, nets, *,
+          allow_drilled=False, max_jumper_length=0):
     """
     Place components on a board, according to a net list.
 
@@ -103,6 +162,7 @@ def place(board, components, nets, *, allow_drilled=False):
         condutively connected.
     allow_drilled: If set, solutions may contain drilled out holes. Traces that
         are connected to drilled out holes are considered to not conduct.
+    max_jumper_length: Maximum length of conductive jumper links.
 
     Yields:
         Placements which satify the input constraints.
@@ -129,6 +189,7 @@ def place(board, components, nets, *, allow_drilled=False):
         Ie. There must not be multiple components that occupy a given space.
 
         """
+
         # Make internal variables to determine whether a given component is in
         # a particular space.
         occ = {(c, s): wff.Var("{} occ {}".format(c, s))
@@ -148,9 +209,14 @@ def place(board, components, nets, *, allow_drilled=False):
                     for c in components
                     for s in board.spaces))
 
-        # Enforce that at most one component can occupy a space.
+        # Enforce that at most one component/jumper can occupy a space.
+        jumpers_that_occupy_space = {s:
+                                       [j for j in jumpers if s in j.occupies]}
+
         one_component_per_space = cnf.Expr.all(
-                                 cnf.at_most_one(occ[c, s] for c in components)
+                 cnf.at_most_one(
+                            {occ[c, s] for c in components} |
+                            {j.pres_var for j in jumpers_that_occupy_space[s]})
                     for s in board.spaces)
 
         # Return all of the above.
@@ -175,8 +241,10 @@ def place(board, components, nets, *, allow_drilled=False):
 
         # Produce an adjacency dict for the electrical continuity graph implied
         # by board.holes and board.traces.
-        neighbours = {h1: [h2 for h2 in board.holes if _Link(h1, h2) in links]
-                                                         for h1 in board.holes}
+        neighbours = {h1: [(l.h2, l.pres_var) for l in links if h1 == l.h1]
+                                                       for h1 in board.holes} |
+                     {h2: [(l.h1, l.pres_var) for l in links if h2 == l.h2]
+                                                       for h2 in board.holes}
 
         # Make internal variables to indicate whether a hole is connected to a
         # particular terminal. Defined for all holes, and the first terminal in
@@ -207,9 +275,9 @@ def place(board, components, nets, *, allow_drilled=False):
         term_conn_constraints = wff.to_cnf(
             wff.for_all(
                     term_conn[net[0], h].iff(
-                        wff.exists(wff.add_var(
-                            term_conn[net[0], n] & link_pres[_Link(h, n)])
-                                                      for n in neighbours[h]) |
+                        wff.exists(
+                                  wff.add_var(term_conn[net[0], n] & link_pres)
+                                           for n, link_pres in neighbours[h]) |
                         wff.exists(comp_pos[net[0].component, p]
                              for p in positions_which_have_term_in[net[0], h]))
                     for net in nets
@@ -242,9 +310,8 @@ def place(board, components, nets, *, allow_drilled=False):
                 wff.for_all(
                     term_dist[h, i].iff(
                         wff.for_all(
-                            wff.add_var(term_dist[n, i - 1] |
-                                        ~link_pres[_Link(h, n)])
-                                                    for n in neighbours[h]) &
+                            wff.add_var(term_dist[n, i - 1] | ~link_pres)
+                                           for n, link_pres in neighbours[h]) &
                         term_dist[h, i - 1])
                     for h in board.holes
                     for i in range(1, len(board.holes))))
@@ -303,23 +370,26 @@ def place(board, components, nets, *, allow_drilled=False):
                                                for pos in positions[comp])
                                     for comp in components)
 
+    # Make jumpers, and their associated links.
+    jumpers = [_Jumper(h1, h2) in _Jumper.gen_jumpers(board)]
+    jumper_links = [_Link(j.h1, j.h2, j.pres_var))
+                                                    for h1, h2 in gen_jumpers()
+                                                    if h2 in board.holes]
+
+    # Make links for each trace.
+    trace_links = [_Link(*l, Var("trace {} link".format(l)))
+                                                         for l in board.traces]
+
     # Make variables to indicate holes which have been drilled out.
     drilled = {h: wff.Var("{} drilled".format(h)) for h in board.holes}
 
-    # Create `links`, using `board.traces`. This is used when building the
-    # continuity constraints rather than using `board.traces` directly. In
-    # future, `links` will be extended to include other possible conductive
-    # elements (eg. jumper wires).
-    links = [_Link(*l) for l in board.traces]
-    
-    # Make internal variables which indicate which links are present in the
-    # solution.
-    link_pres = {l: wff.Var("{} present".format(l)) for l in links}
-
-    # Enforce the relationship between `drilled` and `link_pres`.
+    # Add a constraint to enforce the following: A trace link is present iff
+    # neither of the holes it is connected to are drilled.
     drilled_link_constraints = wff.to_cnf(
-        wff.for_all(link_pres[l].iff(~drilled[l.h1] & ~drilled[l.h2])
+        wff.for_all(l.pres_var.iff(~drilled[l.h1] & ~drilled[l.h2])
                                                                for l in links))
+
+    links = jumper_links + trace_links
 
     # If drilling is not allowed, then force drilled[h] to be false for all
     # holes `h`.
@@ -346,10 +416,11 @@ def place(board, components, nets, *, allow_drilled=False):
         mapping = {comp: pos
                      for (comp, pos), var in comp_pos.items() if sol[var]}
         drilled_holes = {h for h in board.holes if sol[drilled[h]]}
+        jumpers = {(l.h1, l.h2) for l in jumper_links if sol[l.pres_var]}
 
         # If this fails the "exactly one position" constraint has been
         # violated.
         assert len(mapping) == len(components)
-        yield Placement(board, mapping, drilled_holes)
+        yield Placement(board, mapping, drilled_holes, jumpers)
 
 
