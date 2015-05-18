@@ -133,20 +133,21 @@ class _Jumper():
         self.occupies = self._get_occupies()
 
     def _get_occupies(self):
-        if h2[0] - h1[0] == 0:
-            assert h1[1] < h2[1]
+        if self.h2[0] - self.h1[0] == 0:
+            assert self.h1[1] < self.h2[1]
             inc = 0, 1
-        elif h2[1] - h2[1] == 0:
-            assert h1[0] < h2[0]
+        elif self.h2[1] - self.h1[1] == 0:
+            assert self.h1[0] < self.h2[0]
             inc = 1, 0
         else:
             assert False
 
         def gen_coords():
-            h = h1
-            while h != h2:
+            h = self.h1
+            while h != self.h2:
                 yield h
                 h = h[0] + inc[0], h[1] + inc[1]
+            yield h
 
         return set(gen_coords())
 
@@ -258,8 +259,6 @@ def place(board, components, nets, *,
         neighbours = {h: [(l.get_other(h), l.pres_var) 
                              for l in links if h in l.holes]
                          for h in board.holes} 
-        from pprint import pprint
-        pprint(neighbours)
 
         # Make internal variables to indicate whether a hole is connected to a
         # particular terminal. Defined for all holes, and the first terminal in

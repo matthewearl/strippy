@@ -46,6 +46,7 @@ _PLACEMENT_SEP = 30
 _BORDER_COLOR = "black"
 _CROSS_SIZE = 40
 _CROSS_COLOR = "red"
+_JUMPER_WIDTH = 2 * _LINE_WIDTH
 
 def _grid_coords_to_pixel(coords, center=False):
     x, y = coords
@@ -86,7 +87,7 @@ def _draw_jumper(j, file=sys.stdout):
     print('<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="{}" '
           'stroke-width="{}" />'.format(
             points[0][0], points[0][1], points[1][0], points[1][1],
-            _JUMPER_COLOR, _LINE_WIDTH),
+            _JUMPER_COLOR, _JUMPER_WIDTH),
           file=file)
 
 def _draw_trace(t, file=sys.stdout):
@@ -198,8 +199,8 @@ def print_svg(placements, file=sys.stdout):
         for hole in placement.drilled_holes:
             _draw_drilled_hole(hole, file=file)
 
-        for link in placement.jumpers:
-            _draw_jumpers(jumper, file=file)
+        for jumper in placement.jumpers:
+            _draw_jumper(jumper, file=file)
 
         for comp, pos in placement.items():
             _draw_component_terminals(comp, pos, file=file)
