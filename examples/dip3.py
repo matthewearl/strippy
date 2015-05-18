@@ -20,7 +20,7 @@
 #     USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 """
-Trivial example, placing a 8-pin DIP package.
+Place a 4-pin DIP-backage with resistors placed horizontally.
 
 """
 
