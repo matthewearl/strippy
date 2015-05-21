@@ -31,6 +31,7 @@ import argparse
 import sys
 
 import placer
+import solver
 import svg
 
 def main(board, components, nets, args=None):
@@ -45,12 +46,22 @@ def main(board, components, nets, args=None):
                         help="Maximum jumper length")
     parser.add_argument('--svg', nargs='?', const=True,
                         help="Output SVG for the solutions")
+    parser.add_argument('--solver', nargs='?', type=str, default=None,
+                        help="Solver to use. Options are: {}.".format(
+                            ", ".join(str(x) for x in solver.solvers.keys())))
+
     parsed_args = parser.parse_args(args if args is not None else sys.argv[1:])
+
+    if parsed_args.solver:
+        slvr = solver.solvers[parsed_args.solver]
+    else:
+        slvr = None
 
     placement_iter = placer.place(
                           board, components, nets,
                           allow_drilled=parsed_args.allow_drilled,
-                          max_jumper_length=parsed_args.max_jumper_length)
+                          max_jumper_length=parsed_args.max_jumper_length,
+                          slvr=slvr)
 
     if parsed_args.first_only:
         placement_iter = [next(placement_iter)]

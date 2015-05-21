@@ -21,8 +21,8 @@
 """
 CNF module.
 
-A wrapper around pycosat with some more Pythonic primitives, and utility
-functions.
+A wrapper around the solver module with some more Pythonic primitives, and
+utility functions.
 
 """
 
@@ -44,7 +44,7 @@ __all__ = (
 import collections 
 import sys
 
-import pycosat
+import solver
 
 class Var():
     """
@@ -278,30 +278,32 @@ def tseitin_and(pvars):
 
     return out_var, expr
 
-def solve(cnf):
+def solve(cnf, slvr=None):
     """
     Solve a CNF formula.
 
     """
 
+    if slvr is None:
+        slvr = solver.solvers["pycosat"]
+
     # Construct mappings between Vars and variable IDs. Variable IDs are
-    # integers > 0 used by pycosat to identify variables.
+    # integers > 0 used by the solver module to identify variables.
     pvars = list(sorted({term.var for clause in cnf for term in clause},
                         key=lambda v: v.name))
     pvar_to_id = {pvar: idx + 1 for idx, pvar in enumerate(pvars)}
 
-    # The pycosat input is just a list of lists, mirroring the CNF/Clause
+    # The solver module input is just a list of lists, mirroring the CNF/Clause
     # hierarchy. Terms are replaced by their variable IDs, (numerically)
     # negated if the term is (logically) negated.
     cnf = [[pvar_to_id[term.var] * (-1 if term.negated else 1)
                 for term in clause]
                     for clause in cnf]
     
+    for sol in slvr.itersolve(cnf):
+        yield {pvars[abs(n) - 1]: (n > 0) for n in sol}
 
-    for sol in pycosat.itersolve(cnf):
-        yield { pvars[abs(n) - 1]: (n > 0) for n in sol }
-
-def solve_one(cnf):
+def solve_one(cnf, slvr=None):
     """
     Solve a CNF formula. Return only the first solution.
 
@@ -309,5 +311,5 @@ def solve_one(cnf):
 
     """
     
-    return next(solve(cnf))
+    return next(solve(cnf, slvr=slvr))
 

@@ -164,7 +164,8 @@ class _Jumper():
         return (cls(h1, h2) for h1, h2 in gen_all() if h2 in board.holes)
 
 def place(board, components, nets, *,
-          allow_drilled=False, max_jumper_length=0):
+          allow_drilled=False, max_jumper_length=0,
+          slvr=None):
     """
     Place components on a board, according to a net list.
 
@@ -420,7 +421,7 @@ def place(board, components, nets, *,
         print("Solving!")
 
     # Find solutions and map each one back to a Placement.
-    for sol in cnf.solve(expr):
+    for sol in cnf.solve(expr, slvr=slvr):
         if _DEBUG:
             print("Done")
             for var, val in sol.items():
