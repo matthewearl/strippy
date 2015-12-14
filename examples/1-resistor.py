@@ -20,7 +20,7 @@
 #     USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 """
-Trivial example, placing a single resistor on a 2x2 strip board.
+Trivial example, placing a single resistor on a 1x2 strip board.
 
 """
 
