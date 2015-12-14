@@ -1,0 +1,30 @@
+<svg width="90.0" height="300.0" xmlns="http://www.w3.org/2000/svg">
+<g transform="translate(15.0 15.0)">
+<rect x="0" y="0" width="60.0" height="120.0" fill="transparent" stroke="black" stroke-width="1.0" />
+<circle cx="30.0" cy="90.0" r="10.0" stroke="#B0B0B0" stroke-width="1.0" fill="transparent" />
+<circle cx="30.0" cy="30.0" r="10.0" stroke="#B0B0B0" stroke-width="1.0" fill="transparent" />
+<circle cx="30.0" cy="30.0" r="20" stroke="#008000" stroke-width="1.0" fill="transparent" />
+<text x="30.0" y="30.0" font-family="Verdana" font-size="10" color="black">2</text>
+<circle cx="30.0" cy="90.0" r="20" stroke="#008000" stroke-width="1.0" fill="transparent" />
+<text x="30.0" y="90.0" font-family="Verdana" font-size="10" color="black">1</text>
+<rect x="10.0" y="60.0" width="40.0" height="10.0" fill="#008000" fill-opacity="0.5" />
+<rect x="10.0" y="70.0" width="40.0" height="40.0" fill="#008000" fill-opacity="0.5" />
+<rect x="10.0" y="10.0" width="40.0" height="40.0" fill="#008000" fill-opacity="0.5" />
+<rect x="10.0" y="50.0" width="40.0" height="10.0" fill="#008000" fill-opacity="0.5" />
+<text x="0.0" y="10.0" font-family="Verdana" font-size="10" color="black">R1</text>
+</g>
+<g transform="translate(15.0 165.0)">
+<rect x="0" y="0" width="60.0" height="120.0" fill="transparent" stroke="black" stroke-width="1.0" />
+<circle cx="30.0" cy="90.0" r="10.0" stroke="#B0B0B0" stroke-width="1.0" fill="transparent" />
+<circle cx="30.0" cy="30.0" r="10.0" stroke="#B0B0B0" stroke-width="1.0" fill="transparent" />
+<circle cx="30.0" cy="90.0" r="20" stroke="#008000" stroke-width="1.0" fill="transparent" />
+<text x="30.0" y="90.0" font-family="Verdana" font-size="10" color="black">2</text>
+<circle cx="30.0" cy="30.0" r="20" stroke="#008000" stroke-width="1.0" fill="transparent" />
+<text x="30.0" y="30.0" font-family="Verdana" font-size="10" color="black">1</text>
+<rect x="10.0" y="60.0" width="40.0" height="10.0" fill="#008000" fill-opacity="0.5" />
+<rect x="10.0" y="70.0" width="40.0" height="40.0" fill="#008000" fill-opacity="0.5" />
+<rect x="10.0" y="10.0" width="40.0" height="40.0" fill="#008000" fill-opacity="0.5" />
+<rect x="10.0" y="50.0" width="40.0" height="10.0" fill="#008000" fill-opacity="0.5" />
+<text x="0.0" y="10.0" font-family="Verdana" font-size="10" color="black">R1</text>
+</g>
+</svg>

@@ -23,9 +23,21 @@ Examples
 Note: All of these examples require the repository root to be in the
 `PYTHONPATH`.
 
+### Single resistor
+
 Placement of a resistor on a 1x2 stripboard:
 
    examples/1-resistor.py --svg output/1-resistor.svg
+
+Here is the output:
+
+<img src="https://raw.githubusercontent.com/matthewearl/strippy/master/example-output/1-resistor.svg"></img>
+
+The resistor is shown as a green rectangle. Note there are two output images
+because of the two possible orientations of the resistor. The numbers indicate
+the components' terminal numbering.
+
+### 4-PIN DIP package, with vertical resistors
 
 Placement of a 4-pin DIP package, with resistors joining adjacent pins:
 
@@ -33,12 +45,28 @@ Placement of a 4-pin DIP package, with resistors joining adjacent pins:
 
 This example requires `--allow-drilled` to be passed to find solutions, to
 ensure opposing pins of the DIP package are disconnected.
+
+Here is the output:
+
+<img src="https://raw.githubusercontent.com/matthewearl/strippy/master/example-output/dip2.svg"></img>
+
+Again, there are two possible solutions. The horizontal grey lines indicate the
+conductive traces on the stripboard, and the red crosses indicate which holes
+should be drilled out (breaking the conductive trace).
+
+### 4-pin DIP package, with horizontal resistors
     
 Placement of a 4-pin DIP package, with resistors joining opposing pins:
 
-   examples/dip3.py --first-only --allow-drilled --max-jumper-length=1 --svg output/
+   examples/dip3.py --first-only --allow-drilled --max-jumper-length=1 --svg output/dip3.svg
 
 Note that `--max-jumper-length=1` is passed to allow jumpers (with a maximum
 length of 1) in the solution. `--first-only` is passed so that only the first
 solution found (of which there are many) are displayed.
+
+Here is the output:
+
+<img src="https://raw.githubusercontent.com/matthewearl/strippy/master/example-output/dip3.svg"></img>
+
+The thick lines indicate where jumpers should be placed.
 
