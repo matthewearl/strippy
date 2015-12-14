@@ -42,4 +42,3 @@ Note that `--max-jumper-length=1` is passed to allow jumpers (with a maximum
 length of 1) in the solution. `--first-only` is passed so that only the first
 solution found (of which there are many) are displayed.
 
-
