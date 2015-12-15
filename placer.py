@@ -164,15 +164,17 @@ class _Jumper():
         def is_between(h1, h2, h):
             """Check if `h` is between `h1` and `h2`"""
             if h1[0] == h2[0]:
-                return min(h1[1], h2[1]) <= h[1] <= max(h1[1], h2[1])
+                return (h[0] == h1[0] and
+                               min(h1[1], h2[1]) <= h[1] <= max(h1[1], h2[1]))
             if h1[1] == h2[1]:
-                return min(h1[0], h2[0]) <= h[0] <= max(h1[0], h2[0])
+                return (h[1] == h1[1] and 
+                               min(h1[0], h2[0]) <= h[0] <= max(h1[0], h2[0]))
             assert False, "Jumper is neither horizontal nor vertical"
 
-        neighbours = {}
+        neighbours = collections.defaultdict(set)
         for h1, h2 in board.traces:
-            neighbours.get(h1, set()).add(h2)
-            neighbours.get(h2, set()).add(h1)
+            neighbours[h1].add(h2)
+            neighbours[h2].add(h1)
 
         def is_redundant(h1, h2):
             # Indicate if a potential jumper is superceded by traces.
@@ -186,7 +188,9 @@ class _Jumper():
                 # Search for neighbours that are between h1 and h2. There
                 # should be at most one (otherwise an unsupported board layout
                 # has been used).
-                next_hs = [n for n in neighbours[h] if is_between(h1, h2, n)]
+                next_hs = [n for n in neighbours[h] if
+                                        is_between(h1, h2, n) and 
+                                        n != prev_h]
                 if len(next_hs) == 0:
                     return False
                 if len(next_hs) > 1:
@@ -199,6 +203,10 @@ class _Jumper():
                     next_h is not h2 and 
                     neighbours[h] != {prev_h, next_h}):
                     return False
+
+                prev_h = h
+                h = next_h
+                next_h = None
             return True 
 
         return (cls(h1, h2) for h1, h2 in gen_all()
