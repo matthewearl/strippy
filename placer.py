@@ -161,7 +161,48 @@ class _Jumper():
                     yield hole, (hole[0] + length, hole[1])
                     yield hole, (hole[0], hole[1] + length)
 
-        return (cls(h1, h2) for h1, h2 in gen_all() if h2 in board.holes)
+        def is_between(h1, h2, h):
+            """Check if `h` is between `h1` and `h2`"""
+            if h1[0] == h2[0]:
+                return min(h1[1], h2[1]) <= h[1] <= max(h1[1], h2[1])
+            if h1[1] == h2[1]:
+                return min(h1[0], h2[0]) <= h[0] <= max(h1[0], h2[0])
+            assert False, "Jumper is neither horizontal nor vertical"
+
+        neighbours = {}
+        for h1, h2 in board.traces:
+            neighbours.get(h1, set()).add(h2)
+            neighbours.get(h2, set()).add(h1)
+
+        def is_redundant(h1, h2):
+            # Indicate if a potential jumper is superceded by traces.
+            # This is the case if there are traces which follow the path of the
+            # jumper, and there are no branches along this path.
+
+            # Starting from `h1`, step through neighbours of the current hole.
+            h = h1
+            prev_h = None
+            while h != h2:
+                # Search for neighbours that are between h1 and h2. There
+                # should be at most one (otherwise an unsupported board layout
+                # has been used).
+                next_hs = [n for n in neighbours[h] if is_between(h1, h2, n)]
+                if len(next_hs) == 0:
+                    return False
+                if len(next_hs) > 1:
+                    assert False, "{} has multiple neighbours between {} " \
+                                  "and {}".format(h, h1, h2)
+                next_h = next_hs[0]
+
+                # Check there are no branches at this point in the link.
+                if (prev_h is not None and
+                    next_h is not h2 and 
+                    neighbours[h] != {prev_h, next_h}):
+                    return False
+            return True 
+
+        return (cls(h1, h2) for h1, h2 in gen_all()
+                             if h2 in board.holes and not is_redundant(h1, h2))
 
 def place(board, components, nets, *,
           allow_drilled=False, max_jumper_length=0,
