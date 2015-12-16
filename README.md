@@ -41,10 +41,10 @@ the components' terminal numbering.
 
 Placement of a 4-pin DIP package, with resistors joining adjacent pins:
 
-    examples/dip2.py --allow-drilled --svg output/dip2.svg
+    examples/dip2.py --max-drilled=2 --svg output/dip2.svg
 
-This example requires `--allow-drilled` to be passed to find solutions, to
-ensure opposing pins of the DIP package are disconnected.
+This example requires `--max-drilled` to be passed to find solutions, to
+allow the holes between the pins of the DIP package to be drilled.
 
 Here is the output:
 
@@ -58,11 +58,12 @@ should be drilled out (breaking the conductive trace).
     
 Placement of a 4-pin DIP package, with resistors joining opposing pins:
 
-    examples/dip3.py --first-only --allow-drilled --max-jumper-length=1 --svg output/dip3.svg
+    examples/dip3.py --first-only --max-drilled=2 --max-jumpers=2 --max-jumper-length=1 --svg output/dip3.svg
 
-Note that `--max-jumper-length=1` is passed to allow jumpers (with a maximum
-length of 1) in the solution. `--first-only` is passed so that only the first
-solution found (of which there are many) are displayed.
+Note that `max-jumpers=2` and `--max-jumper-length=1` is passed to allow at
+most 2 jumpers (with a maximum length of 1) in the solution. `--first-only` is
+passed so that only the first solution found (of which there are many) are
+displayed.
 
 Here is the output:
 

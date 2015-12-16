@@ -36,6 +36,32 @@ import wff
 
 _DEBUG = False
 
+def _at_most(pvars, k, var_prefix=""):
+    """
+    Implement LTseq, as described in 
+
+    """
+    s = {(i, j): wff.Var("{} s[{},{}]".format(var_prefix, i, j))
+                        for i in range(1, len(pvars)) for j in range(1, k + 1)}
+    n = len(pvars)
+
+    expr = ((pvars[0] >> s[1, 1]) &
+            wff.for_all(~s[1, j] for j in range(2, k + 1)))
+    for i in range(2, n):
+        expr &= (pvars[i - 1] >> s[i, 1]) 
+        expr &= (s[i - 1, 1] >> s[i, 1])
+        for j in range(2, k + 1):
+            expr &= ~pvars[i - 1] | ~s[i - 1, j - 1] | s[i, j]
+            expr &= s[i - 1, j] >> s[i, j]
+        expr &= pvars[i - 1] >> ~s[i - 1, k]
+    expr &= pvars[-1] >> ~s[n - 1, k]
+
+    cnf = wff.to_cnf(expr)
+
+    assert len(cnf) == 2 * n * k + n - 3 * k - 1
+
+    return cnf
+
 class Placement(collections.abc.Mapping):
     """
     A solution yielded by `place`.
@@ -214,6 +240,7 @@ class _Jumper():
 
 def place(board, components, nets, *,
           allow_drilled=False, max_jumper_length=0,
+          max_drilled=None, max_jumpers=None,
           slvr=None):
     """
     Place components on a board, according to a net list.
@@ -226,6 +253,11 @@ def place(board, components, nets, *,
     allow_drilled: If set, solutions may contain drilled out holes. Traces that
         are connected to drilled out holes are considered to not conduct.
     max_jumper_length: Maximum length of conductive jumper links.
+    max_drilled: Maximum number of drilled holes in the solution. None implies
+        unbounded.
+    max_jumpers: Maximum number of jumpers in the solution. None implies
+        unbounded.
+    slvr: Solver to use to solve the placement.
 
     Yields:
         Placements which satify the input constraints.
@@ -435,6 +467,8 @@ def place(board, components, nets, *,
                                     for comp in components)
 
     # Make jumpers, and their associated links.
+    if max_jumpers == 0:
+        max_jumper_length = 0
     jumpers = [j for j in _Jumper.gen_jumpers(board, max_jumper_length)]
     jumper_links = [_Link(j.h1, j.h2, j.pres_var) for j in jumpers]
 
@@ -453,11 +487,20 @@ def place(board, components, nets, *,
 
     links = jumper_links + trace_links
 
-    # If drilling is not allowed, then force drilled[h] to be false for all
-    # holes `h`.
-    if not allow_drilled:
+    # Enforce cardinality constraints on drilled holes.
+    if max_drilled == 0:
         drilled_link_constraints |= wff.to_cnf(
                                 wff.for_all(~drilled[h] for h in board.holes))
+    elif max_drilled is not None:
+        drilled_link_constraints |= _at_most(
+                                            [drilled[h] for h in board.holes],
+                                            max_drilled)
+
+    # Enforce cardinality constraints on jumpers.
+    if max_jumpers is not None and max_jumpers > 0 and len(jumpers) > 1:
+        drilled_link_constraints |= _at_most([j.pres_var for j in jumpers],
+                                             max_jumpers,
+                                             "max jumper")
 
     # Combine all the constraints into a single expression.
     expr = (one_pos_per_comp | 

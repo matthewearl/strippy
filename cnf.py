@@ -131,6 +131,9 @@ class Expr():
     def __iter__(self):
         return iter(self.clauses)
 
+    def __len__(self):
+        return len(self.clauses)
+
     @property
     def stats(self):
         num_clauses = len(self.clauses)

@@ -40,8 +40,12 @@ def main(board, components, nets, args=None):
     parser = argparse.ArgumentParser( description='Find circuit placements.')
     parser.add_argument('--first-only', action='store_true',
                         help="Only output the first solution")
-    parser.add_argument('--allow-drilled', action='store_true',
-                        help="Allow holes to be drilled out")
+    parser.add_argument('--max-drilled', nargs='?', type=int, default=0,
+                        help="Maximum number of holes to allow to be drilled "
+                             "out. Passing -1 means no limit.")
+    parser.add_argument('--max-jumpers', nargs='?', type=int, default=0,
+                        help="Maximum number of jumpers to allow. Passing -1 "
+                             "means no limit.")
     parser.add_argument('--max-jumper-length', nargs='?', type=int, default=0,
                         help="Maximum jumper length")
     parser.add_argument('--svg', nargs='?', const=True,
@@ -57,9 +61,14 @@ def main(board, components, nets, args=None):
     else:
         slvr = None
 
+    max_drilled = (None if parsed_args.max_drilled == -1
+                                                  else parsed_args.max_drilled)
+    max_jumpers = (None if parsed_args.max_jumpers == -1
+                                                  else parsed_args.max_jumpers)
     placement_iter = placer.place(
                           board, components, nets,
-                          allow_drilled=parsed_args.allow_drilled,
+                          max_drilled=max_drilled,
+                          max_jumpers=max_jumpers,
                           max_jumper_length=parsed_args.max_jumper_length,
                           slvr=slvr)
 
