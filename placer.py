@@ -38,7 +38,15 @@ _DEBUG = False
 
 def _at_most(pvars, k, var_prefix=""):
     """
-    Implement LTseq, as described in 
+    Implement LTseq, as described in:
+
+        Towards an Optimal CNF Encoding of Boolean Cardinality Constraints
+
+    by Carsten Sinz (2005).
+
+    Note that there may be truth assignments that satisfy the expression
+    returned, which differ only in the internal variables. As such duplicate
+    solutions may be returned.
 
     """
     s = {(i, j): wff.Var("{} s[{},{}]".format(var_prefix, i, j))
@@ -494,13 +502,14 @@ def place(board, components, nets, *,
     elif max_drilled is not None:
         drilled_link_constraints |= _at_most(
                                             [drilled[h] for h in board.holes],
-                                            max_drilled)
+                                            max_drilled,
+                                            var_prefix="max drilled")
 
     # Enforce cardinality constraints on jumpers.
     if max_jumpers is not None and max_jumpers > 0 and len(jumpers) > 1:
         drilled_link_constraints |= _at_most([j.pres_var for j in jumpers],
                                              max_jumpers,
-                                             "max jumper")
+                                             var_prefix="max jumper")
 
     # Combine all the constraints into a single expression.
     expr = (one_pos_per_comp | 
