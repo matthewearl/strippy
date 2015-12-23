@@ -224,7 +224,7 @@ class _Formula(metaclass=abc.ABCMeta):
                 # `add_var` node appears in an expression that was optimised
                 # out due to constant elimination (eg. `(exists([]) &
                 # add_var(Var()))`).
-                expr = Expr()
+                pass
 
         return expr
 
