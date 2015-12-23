@@ -149,8 +149,9 @@ class _Formula(metaclass=abc.ABCMeta):
         A sub-formula is replaced if it is wrapped with _AddVarFlag.
 
         Returns:
-            A CNF expression to enforce the definition of the new variables,
-            and the formula with the variables in place of the sub trees.
+            A sequence of `(var, formula)` pairs, of intermediate vars and the
+            formulas they represent, and the formula with variables in place of
+            the sub trees.
 
         """
         raise NotImplemented
@@ -178,10 +179,59 @@ class _Formula(metaclass=abc.ABCMeta):
         
         return clauses
 
+    def _add_intermediate_vars_to_expr(self, intermediate_vars, expr):
+        """
+        Augment a CNF expression to enforce the intermediate variabele
+        definitions. In general this is done by appending clauses equivalent to
+        the following:
+        
+            <new var> iff <associated formula>
+        
+        However, in the case where <new var> only appears in positive terms
+        elsewhere in the expression, this can be reduced to:
+        
+            <new var> => <associated formula>
+        
+        While preserving satisfiability. Similarly, if <new var> only appears
+        in negative terms elsewhere in the expression, clauses equivalent to
+        the following can be added:
+        
+            <new var> <= <associated formula>
+        
+        While also preserving satisfiability.
+
+        """
+        # Iterate over the intermediate variables and their associated CNF
+        # expressions. Nested intermediate vars (ie. intermediate
+        # vars in the formula associated with a different intermediate vars)
+        # are handled in the recursive call to `to_cnf`.
+        for var, var_formula in intermediate_vars:
+            any_pos = any(not t.negated for c in expr for t in c
+                                                               if t.var == var)
+            any_neg = any(t.negated for c in expr for t in c if t.var == var)
+
+            if any_neg and any_pos:
+                # Mixed negative and positive.
+                expr |= to_cnf(var.iff(var_formula))
+            elif not any_neg and any_pos:
+                # Purely positive.
+                expr |= to_cnf(var >> var_formula)
+            elif any_neg and not any_pos:
+                # Purely negative.
+                expr |= to_cnf(var << var_formula)
+            else:
+                # No occurences of the variable. This can happen if an
+                # `add_var` node appears in an expression that was optimised
+                # out due to constant elimination (eg. `(exists([]) &
+                # add_var(Var()))`).
+                expr = Expr()
+
+        return expr
+
     def _to_cnf(self):
         """Implementation of `to_cnf()`."""
 
-        intermediate_vars_expr, formula = self._create_intermediate_vars()
+        intermediate_vars, formula = self._create_intermediate_vars()
 
         formula = formula._eliminate_iff()
         formula = formula._eliminate_implies()
@@ -195,7 +245,9 @@ class _Formula(metaclass=abc.ABCMeta):
                                                             for term in clause)
                 for clause in clauses)
 
-        return expr | intermediate_vars_expr
+        expr = self._add_intermediate_vars_to_expr(intermediate_vars, expr)
+
+        return expr
 
 class _OpType(enum.Enum):
     NOT     = 1
@@ -351,10 +403,10 @@ class _Op(_Formula):
         child_results = tuple(a._create_intermediate_vars()
                                                            for a in self._args)
 
-        child_exprs = cnf.Expr.all(r[0] for r in child_results)
+        child_vars = [pair for pairs, _ in child_results for pair in pairs]
         child_formulae = [r[1] for r in child_results]
 
-        return child_exprs, _Op(self._op_type, child_formulae)
+        return child_vars, _Op(self._op_type, child_formulae)
 
 class _Atom(_Formula):
     """
@@ -382,7 +434,7 @@ class _Atom(_Formula):
         return {frozenset({_Term(self, negated=False)})}
 
     def _create_intermediate_vars(self):
-        return cnf.Expr(()), self
+        return [], self
 
 class Var(cnf.Var, _Atom):
     def __init__(self, name=None):
@@ -415,9 +467,9 @@ class _AddVarFlag(_Formula):
     def _create_intermediate_vars(self):
         new_var = Var()
 
-        expr, formula = self.formula._create_intermediate_vars()
+        intermediate_vars, formula = self.formula._create_intermediate_vars()
 
-        return to_cnf(new_var.iff(formula)) | expr, new_var
+        return (intermediate_vars + [(new_var, formula)]), new_var
 
     def _is_op(self):
         raise AssertionError
