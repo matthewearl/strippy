@@ -1,4 +1,4 @@
-# Copyright (c) 2015 Matthew Earl
+# Copyright (c) 2015, 2018 Matthew Earl
 # 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -30,7 +30,7 @@ __all__ = (
 import argparse
 import sys
 
-import placer
+import placerz3
 import solver
 import svg
 
@@ -65,12 +65,11 @@ def main(board, components, nets, args=None):
                                                   else parsed_args.max_drilled)
     max_jumpers = (None if parsed_args.max_jumpers == -1
                                                   else parsed_args.max_jumpers)
-    placement_iter = placer.place(
+    placement_iter = placerz3.place(
                           board, components, nets,
                           max_drilled=max_drilled,
                           max_jumpers=max_jumpers,
-                          max_jumper_length=parsed_args.max_jumper_length,
-                          slvr=slvr)
+                          max_jumper_length=parsed_args.max_jumper_length)
 
     if parsed_args.first_only:
         placement_iter = [next(placement_iter)]
